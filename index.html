@@ -226,6 +226,27 @@ const AVATARS = {
 
 const DC = {Yeti:"yeti",Chris:"chris",Greg:"greg"};
 
+// Tiebreaker order: Greg > Chris > Yeti
+const TIEBREAK = {Greg:0, Chris:1, Yeti:2};
+
+// FIFA rankings (June 2026) for match display ordering
+const FIFA_RANK = {
+  "France":2,"Argentina":3,"Spain":4,"England":5,"Brazil":6,"Portugal":7,
+  "Netherlands":8,"Germany":9,"Belgium":10,"Uruguay":12,"Croatia":13,
+  "Mexico":16,"Japan":17,"Morocco":18,"Colombia":19,"Senegal":20,
+  "Switzerland":21,"Türkiye":22,"United States":23,"Norway":24,
+  "Australia":25,"South Korea":26,"Austria":27,"Denmark":28,
+  "Ecuador":29,"Algeria":30,"Czech Republic":32,"Sweden":33,
+  "Egypt":34,"Ghana":35,"Tunisia":36,"Scotland":37,"Paraguay":38,
+  "Iran":39,"Côte d'Ivoire":40,"DR Congo":41,"Uzbekistan":42,
+  "Canada":43,"Bolivia":44,"Jordan":45,"Iraq":46,"Saudi Arabia":47,
+  "South Africa":48,"Cape Verde":50,"Bosnia and Herzegovina":64,
+  "Curaçao":79,"Qatar":80,"Panama":82,"New Zealand":95,
+  "Haiti":110,"Uzbekistan":68
+};
+
+function teamRank(name){ return FIFA_RANK[norm(name)] || 999; }
+
 function norm(n){ return NORM[n]||n; }
 function flag(n){ return FLAGS[norm(n)]||"🏳"; }
 function getDrafter(name){
@@ -307,21 +328,31 @@ function renderMover(completed){
   gainEl.style.display="inline-block";
 }
 
-function renderMatches(today){
+function renderMatches(today, live){
   const col=document.getElementById("centerCol");
-  if(!today.length){
+  // Merge live and today, deduplicate by fixture id, sort by kickoff time
+  const allMap={};
+  [...(live||[]),...(today||[])].forEach(f=>{ allMap[f.fixture.id]=f; });
+  const all=Object.values(allMap).sort((a,b)=>new Date(a.fixture.date)-new Date(b.fixture.date));
+  if(!all.length){
     col.innerHTML=`<div class="panel"><div class="panel-header">&#9917; Today's Pitch</div></div>
       <div class="no-matches"><div class="no-matches-icon">&#9917;</div>
       <h3>No matches today</h3><p style="font-size:.8rem;margin-top:.4rem">Check back on the next match day</p></div>`;
     return;
   }
-  const cards=today.map(f=>{
-    const home=norm(f.teams.home.name);
-    const away=norm(f.teams.away.name);
+  const cards=all.map(f=>{
+    // Higher ranked team always on left
+    let homeRaw=f.teams.home.name, awayRaw=f.teams.away.name;
+    let hgRaw=f.goals.home, agRaw=f.goals.away;
+    if(teamRank(homeRaw)>teamRank(awayRaw)){
+      [homeRaw,awayRaw]=[awayRaw,homeRaw];
+      [hgRaw,agRaw]=[agRaw,hgRaw];
+    }
+    const home=norm(homeRaw); const away=norm(awayRaw);
     const s=f.fixture.status.short;
     const isLive=["1H","HT","2H","ET","P","LIVE"].includes(s);
     const isFT=["FT","AET","PEN"].includes(s);
-    const hg=f.goals.home; const ag=f.goals.away;
+    const hg=hgRaw??0; const ag=agRaw??0;
     const min=f.fixture.status.elapsed;
     const hd=getDrafter(home); const ad=getDrafter(away);
     const statusHtml=isLive?`<span class="match-status-live">${min||""}′</span>`:
@@ -344,7 +375,10 @@ function renderMatches(today){
 }
 
 function renderStandings(pts){
-  const sorted=Object.entries(pts).sort((a,b)=>b[1]-a[1]);
+  const sorted=Object.entries(pts).sort((a,b)=>{
+    if(b[1]!==a[1]) return b[1]-a[1];
+    return TIEBREAK[a[0]]-TIEBREAK[b[0]];
+  });
   const medals=["🥇","🥈","🥉"];
   document.getElementById("standingsList").innerHTML=sorted.map(([name,p],i)=>`
     <div class="drafter-standing ${i===0?"first":""}">
@@ -385,7 +419,7 @@ async function fetchData(){
     const sorted=renderStandings(pts);
     renderLeader(sorted);
     renderMover(data.fixtures.completed||[]);
-    renderMatches(data.fixtures.today||[]);
+    renderMatches(data.fixtures.today||[], data.fixtures.live||[]);
     renderBreakdown(teamPts);
     const d=new Date(data.updated);
     document.getElementById("lastUpdated").textContent="Updated "+d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
