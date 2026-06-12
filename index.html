@@ -837,7 +837,7 @@ function renderStandingsChart(completed){
     history.push({label:d,...pts});
   });
 
-  const W=Math.max(el.offsetWidth||600, 400), H=220, PAD={t:20,r:80,b:30,l:40};
+  const W=Math.max(el.offsetWidth||600, 400), H=260, PAD={t:40,r:80,b:30,l:40};
   const plotW=W-PAD.l-PAD.r, plotH=H-PAD.t-PAD.b;
   const maxPts=Math.max(...history.map(p=>Math.max(p.Yeti,p.Chris,p.Greg)),1);
   const xStep=plotW/(history.length-1||1);
@@ -849,7 +849,7 @@ function renderStandingsChart(completed){
     const lastY = PAD.t+plotH-(history[history.length-1][drafter]/maxPts)*plotH;
     const avatarSize = 32;
     const avatarSrc = AVATARS[drafter];
-    return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
       ${history.map((p,i)=> i===history.length-1 ? '' : `<circle cx="${PAD.l+i*xStep}" cy="${PAD.t+plotH-(p[drafter]/maxPts)*plotH}" r="3" fill="${color}"/>`).join('')}
       <circle cx="${lastX}" cy="${lastY}" r="${avatarSize/2+2}" fill="${color}" opacity="0.3"/>
       <clipPath id="clip-${drafter}"><circle cx="${lastX}" cy="${lastY}" r="${avatarSize/2}"/></clipPath>
@@ -896,15 +896,14 @@ async function fetchData(){
     const localToday = now.toLocaleDateString("en-CA");
     const localYd    = new Date(now - 86400000).toLocaleDateString("en-CA");
     // Tomorrow: cover up to 48h ahead to catch UTC midnight edge cases
-    const localTm1   = new Date(+now + 86400000).toLocaleDateString("en-CA");
-    const localTm2   = new Date(+now + 172800000).toLocaleDateString("en-CA");
+    const localTm = new Date(+now + 86400000).toLocaleDateString("en-CA");
 
     const toLocal = f => new Date(f.utcDate).toLocaleDateString("en-CA");
     const liveLocal      = (data.fixtures.live||[]);
     const liveIds        = new Set(liveLocal.map(f=>f.id));
     const todayLocal     = uniq.filter(f => toLocal(f) === localToday && !liveIds.has(f.id) && f.status !== "IN_PLAY" && f.status !== "PAUSED");
     const yesterdayLocal = uniq.filter(f => toLocal(f) === localYd && !liveIds.has(f.id));
-    const tomorrowLocal  = uniq.filter(f => (toLocal(f) === localTm1 || toLocal(f) === localTm2) && !liveIds.has(f.id) && f.status !== "FINISHED" && f.status !== "IN_PLAY" && f.status !== "PAUSED");
+    const tomorrowLocal  = uniq.filter(f => toLocal(f) === localTm && !liveIds.has(f.id) && f.status !== "FINISHED" && f.status !== "IN_PLAY" && f.status !== "PAUSED");
 
     renderMatches(todayLocal, liveLocal, yesterdayLocal, tomorrowLocal);
     renderBreakdown(teamPts);
