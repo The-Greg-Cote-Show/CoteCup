@@ -3,7 +3,7 @@
 // Smart schedule-aware polling — zero requests outside match windows
 // One API call per cycle pulls everything: live, completed, upcoming
 // ============================================================
-
+ // v4
 const API_BASE  = "https://api.football-data.org/v4";
 
 const COMPETITION = "WC";
