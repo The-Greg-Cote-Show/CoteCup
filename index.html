@@ -121,7 +121,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .breakdown-team{flex:1;color:var(--text);}
 .breakdown-drafter{font-size:.65rem;padding:1px 6px;border-radius:4px;margin-right:6px;}
 .breakdown-pts{font-weight:700;min-width:28px;text-align:right;}
-.match-pts{font-size:.65rem;font-weight:700;padding:2px 6px;border-radius:4px;margin-top:3px;display:inline-block;}
+.match-pts{font-size:.82rem;font-weight:600;padding:2px 6px;border-radius:4px;margin-top:3px;display:inline-block;}
 .pts-yeti{background:rgba(167,139,250,.15);color:var(--yeti-col);}
 .pts-chris{background:rgba(56,189,248,.15);color:var(--chris-col);}
 .pts-greg{background:rgba(251,146,60,.15);color:var(--greg-col);}
@@ -430,20 +430,22 @@ function makeMatchCard(f){
   const hd=getDrafter(home); const ad=getDrafter(away);
   const local=localTime(f.utcDate);
   const utcStr=new Date(f.utcDate).toISOString().slice(11,16)+" UTC";
-  // Build detailed live status
+  // Build detailed live status — infer half from minute to handle delayed status updates
   let statusHtml;
   if(isLive){
     const isPaused = f.status==="PAUSED";
     const isET     = f.status==="EXTRA_TIME";
     const isPKS    = f.status==="PENALTY_SHOOTOUT";
     let label="";
-    if(isPaused)      label="Half Time";
-    else if(isPKS)    label="Penalties";
-    else if(isET)     label=`ET ${min||""}′`;
+    if(isPKS)         label="Penalties";
+    else if(isET){    const inj=f.injuryTime?`+${f.injuryTime}`:""; label=`ET ${min||""}${inj}′`; }
+    else if(isPaused) label="Half Time";
     else {
-      const half = (min||0)>45?"2nd Half":"1st Half";
+      // Infer half from minute — more reliable than status when data is delayed
+      const m = min||0;
+      const half = m>45?"2nd Half":"1st Half";
       const inj  = f.injuryTime ? `+${f.injuryTime}` : "";
-      label = `${half} ${min||""}${inj}′`;
+      label = `${half} ${m}${inj}′`;
     }
     statusHtml=`<span class="match-status-live">${label}</span>`;
   } else if(isFT){
@@ -468,8 +470,10 @@ function makeMatchCard(f){
   if(isFT){
     const isKO = !((f.stage||"").toLowerCase().includes("group"));
     const homeWin = hg>ag, awayWin = ag>hg, isDraw = hg===ag;
-    homePts = `<span class="match-pts ${hd?`pts-${DC[hd]}`:''}">${hd?hd[0]:"?"} +${ptsFor(hg,homeWin,isDraw,isKO)}</span>`;
-    awayPts = `<span class="match-pts ${ad?`pts-${DC[ad]}`:''}">${ad?ad[0]:"?"} +${ptsFor(ag,awayWin,isDraw,isKO)}</span>`;
+    const hp = ptsFor(hg,homeWin,isDraw,isKO);
+    const ap = ptsFor(ag,awayWin,isDraw,isKO);
+    homePts = hd ? `<span class="match-pts pts-${DC[hd]}">${hd} +${hp}</span>` : "";
+    awayPts = ad ? `<span class="match-pts pts-${DC[ad]}">${ad} +${ap}</span>` : "";
   }
 
   const ht=hd?`<div class="team-drafter drafter-${DC[hd]}">${hd}</div>`:"";
@@ -626,15 +630,23 @@ function renderHistory(data){
       const awayPts=(ag)+(isKO?(awayWin?5:0):(awayWin?3:isDraw?1:0));
       const dur=f.score?.duration||'REGULAR';
       const endLabel=dur==='PENALTY_SHOOTOUT'?'Pens':dur==='EXTRA_TIME'?'ET':'FT';
-      html+=`<div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem;display:flex;align-items:center;gap:.5rem;font-size:.82rem;">
-        <span style="color:var(--muted);font-size:.65rem;min-width:22px">${endLabel}</span>
-        <span class="adv-indicator ${hd?DC[hd]:''}" style="width:8px;height:8px;border-radius:50%;background:${hd?`var(--${DC[hd]}-col)`:'var(--border2)'};flex-shrink:0"></span>
-        <span style="flex:1;font-weight:500;">${teamImg(home,f.homeTeam?.crest)} ${home}</span>
-        <span style="font-weight:800;min-width:40px;text-align:center;">${hg}–${ag}</span>
-        <span style="flex:1;text-align:right;font-weight:500;">${away} ${teamImg(away,f.awayTeam?.crest)}</span>
-        <span class="adv-indicator ${adAway?DC[adAway]:''}" style="width:8px;height:8px;border-radius:50%;background:${adAway?`var(--${DC[adAway]}-col)`:'var(--border2)'};flex-shrink:0"></span>
-        <span style="font-size:.65rem;color:var(--${hd?DC[hd]:'muted'}-col,var(--muted));min-width:40px;text-align:right">${hd?hd[0]:''} +${homePts}</span>
-        <span style="font-size:.65rem;color:var(--${adAway?DC[adAway]:'muted'}-col,var(--muted));min-width:40px;text-align:right">${adAway?adAway[0]:''} +${awayPts}</span>
+      const homeColor = hd ? `var(--${DC[hd]}-col)` : 'var(--muted)';
+      const awayColor = adAway ? `var(--${DC[adAway]}-col)` : 'var(--muted)';
+      html+=`<div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:.75rem 1rem;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.75rem;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="font-size:1.5rem;line-height:1">${teamImg(home,f.homeTeam?.crest)}</div>
+          <div style="font-size:.82rem;font-weight:600;text-align:center;">${home}</div>
+          ${hd?`<div style="font-size:.78rem;font-weight:700;color:${homeColor}">${hd} +${homePts}</div>`:''}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:60px;">
+          <div style="font-size:1.4rem;font-weight:900;letter-spacing:.05em;">${hg}–${ag}</div>
+          <div style="font-size:.65rem;color:var(--muted);font-weight:600;">${endLabel}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="font-size:1.5rem;line-height:1">${teamImg(away,f.awayTeam?.crest)}</div>
+          <div style="font-size:.82rem;font-weight:600;text-align:center;">${away}</div>
+          ${adAway?`<div style="font-size:.78rem;font-weight:700;color:${awayColor}">${adAway} +${awayPts}</div>`:''}
+        </div>
       </div>`;
     });
     html+='</div></div>';
