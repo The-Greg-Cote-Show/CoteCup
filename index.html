@@ -469,7 +469,7 @@ function renderMover(completed){
   const away=norm(f.awayTeam?.name||"");
   const hg=f.score?.fullTime?.home??0;
   const ag=f.score?.fullTime?.away??0;
-  document.getElementById("moverHeadline").textContent=`${flag(home)} ${home} ${hg}–${ag} ${away} ${flag(away)}`;
+  document.getElementById("moverHeadline").innerHTML=`${flag(home)} ${home} ${hg}–${ag} ${away} ${flag(away)}`;
   const winner=hg>ag?home:ag>hg?away:null;
   const wd=winner?getDrafter(winner):null;
   document.getElementById("moverSub").textContent=
@@ -842,10 +842,18 @@ function renderStandingsChart(completed){
   const maxPts=Math.max(...history.map(p=>Math.max(p.Yeti,p.Chris,p.Greg)),1);
   const xStep=plotW/(history.length-1||1);
 
+  // Uses global AVATARS object defined at top of script
   const line=(drafter,color)=>{
     const points=history.map((p,i)=>`${PAD.l+i*xStep},${PAD.t+plotH-(p[drafter]/maxPts)*plotH}`).join(' ');
+    const lastX = PAD.l+(history.length-1)*xStep;
+    const lastY = PAD.t+plotH-(history[history.length-1][drafter]/maxPts)*plotH;
+    const avatarSize = 32;
+    const avatarSrc = AVATARS[drafter];
     return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-      ${history.map((p,i)=>`<circle cx="${PAD.l+i*xStep}" cy="${PAD.t+plotH-(p[drafter]/maxPts)*plotH}" r="3" fill="${color}"/>`).join('')}`;
+      ${history.map((p,i)=> i===history.length-1 ? '' : `<circle cx="${PAD.l+i*xStep}" cy="${PAD.t+plotH-(p[drafter]/maxPts)*plotH}" r="3" fill="${color}"/>`).join('')}
+      <circle cx="${lastX}" cy="${lastY}" r="${avatarSize/2+2}" fill="${color}" opacity="0.3"/>
+      <clipPath id="clip-${drafter}"><circle cx="${lastX}" cy="${lastY}" r="${avatarSize/2}"/></clipPath>
+      <image href="${avatarSrc}" x="${lastX-avatarSize/2}" y="${lastY-avatarSize/2}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#clip-${drafter})"/>`;
   };
 
   const xLabels=history.map((p,i)=>`<text x="${PAD.l+i*xStep}" y="${H-8}" text-anchor="middle" font-size="9" fill="#7a8ba8">${p.label}</text>`).join('');
@@ -853,11 +861,9 @@ function renderStandingsChart(completed){
 
   el.style.display='block';
   el.innerHTML=`<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">
+    <defs></defs>
     ${yLabels}${xLabels}
-    ${line('Yeti','#a78bfa')}${line('Chris','#38bdf8')}${line('Greg','#fb923c')}
-    <circle cx="10" cy="${PAD.t}" r="5" fill="#a78bfa"/><text x="18" y="${PAD.t+4}" font-size="10" fill="#a78bfa">Yeti</text>
-    <circle cx="45" cy="${PAD.t}" r="5" fill="#38bdf8"/><text x="53" y="${PAD.t+4}" font-size="10" fill="#38bdf8">Chris</text>
-    <circle cx="90" cy="${PAD.t}" r="5" fill="#fb923c"/><text x="98" y="${PAD.t+4}" font-size="10" fill="#fb923c">Greg</text>
+    ${line('Greg','#fb923c')}${line('Chris','#38bdf8')}${line('Yeti','#a78bfa')}
   </svg>`;
 }
 
@@ -872,31 +878,33 @@ async function fetchData(){
     const sorted=renderStandings(pts);
     renderLeader(sorted);
     renderMover(data.fixtures.completed||[]);
-    // Re-bucket matches by LOCAL date, not UTC date
+    // Re-bucket ALL fixtures by LOCAL date
+    // Pool everything: today, yesterday, tomorrow, completed, and all fixtures
     const allMatches = [
+      ...(data.fixtures.live||[]),
       ...(data.fixtures.today||[]),
       ...(data.fixtures.yesterday||[]),
       ...(data.fixtures.tomorrow||[]),
-      ...(data.fixtures.completed||[]).filter(f=>{
-        // Include completed matches from the last 2 days not already in today/yesterday
-        const d = new Date(f.utcDate);
-        const now = new Date();
-        return (now - d) < 2 * 24 * 60 * 60 * 1000;
-      })
+      ...(data.fixtures.completed||[]),
+      ...(data.fixtures.all||[]),
     ];
-    // Deduplicate
+    // Deduplicate by id
     const seen = new Set();
-    const uniq = allMatches.filter(f=>{ if(seen.has(f.id)) return false; seen.add(f.id); return true; });
+    const uniq = allMatches.filter(f=>{ if(!f.id||seen.has(f.id)) return false; seen.add(f.id); return true; });
 
-    const localToday = new Date().toLocaleDateString("en-CA");
-    const localYd    = new Date(Date.now() - 86400000).toLocaleDateString("en-CA");
-    const localTm    = new Date(Date.now() + 86400000).toLocaleDateString("en-CA");
+    const now = new Date();
+    const localToday = now.toLocaleDateString("en-CA");
+    const localYd    = new Date(now - 86400000).toLocaleDateString("en-CA");
+    // Tomorrow: cover up to 48h ahead to catch UTC midnight edge cases
+    const localTm1   = new Date(+now + 86400000).toLocaleDateString("en-CA");
+    const localTm2   = new Date(+now + 172800000).toLocaleDateString("en-CA");
 
     const toLocal = f => new Date(f.utcDate).toLocaleDateString("en-CA");
-    const todayLocal     = uniq.filter(f => toLocal(f) === localToday && !["IN_PLAY","PAUSED"].includes(f.status));
     const liveLocal      = (data.fixtures.live||[]);
-    const yesterdayLocal = uniq.filter(f => toLocal(f) === localYd);
-    const tomorrowLocal  = uniq.filter(f => toLocal(f) === localTm);
+    const liveIds        = new Set(liveLocal.map(f=>f.id));
+    const todayLocal     = uniq.filter(f => toLocal(f) === localToday && !liveIds.has(f.id) && f.status !== "IN_PLAY" && f.status !== "PAUSED");
+    const yesterdayLocal = uniq.filter(f => toLocal(f) === localYd && !liveIds.has(f.id));
+    const tomorrowLocal  = uniq.filter(f => (toLocal(f) === localTm1 || toLocal(f) === localTm2) && !liveIds.has(f.id) && f.status !== "FINISHED" && f.status !== "IN_PLAY" && f.status !== "PAUSED");
 
     renderMatches(todayLocal, liveLocal, yesterdayLocal, tomorrowLocal);
     renderBreakdown(teamPts);
