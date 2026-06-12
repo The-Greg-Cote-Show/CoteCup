@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Cote Cup 2026 | The Greg Cote Show with Greg Cote</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.3.2/css/flag-icons.min.css"/>
 <style>
 :root {
   --bg:#080c14; --panel:#0f1623; --panel2:#141d2e; --panel3:#1a2540;
@@ -282,16 +283,55 @@ const NORM = {
 };
 
 const FLAGS = {
-  "Côte d'Ivoire":"🇨🇮","Colombia":"🇨🇴","United States":"🇺🇸","Morocco":"🇲🇦","Belgium":"🇧🇪",
-  "Sweden":"🇸🇪","Senegal":"🇸🇳","Canada":"🇨🇦","Australia":"🇦🇺","Iran":"🇮🇷",
-  "Cape Verde":"🇨🇻","Panama":"🇵🇦","Jordan":"🇯🇴","Uzbekistan":"🇺🇿","South Africa":"🇿🇦",
-  "Curaçao":"🇨🇼","France":"🇫🇷","Argentina":"🇦🇷","Portugal":"🇵🇹","Netherlands":"🇳🇱",
-  "Norway":"🇳🇴","Japan":"🇯🇵","Mexico":"🇲🇽","Switzerland":"🇨🇭","Austria":"🇦🇹",
-  "Scotland":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","Czechia":"🇨🇿","Ghana":"🇬🇭","Tunisia":"🇹🇳",
-  "Bosnia and Herzegovina":"🇧🇦","Saudi Arabia":"🇸🇦","Iraq":"🇮🇶","Spain":"🇪🇸",
-  "England":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Brazil":"🇧🇷","Germany":"🇩🇪","Uruguay":"🇺🇾","Croatia":"🇭🇷",
-  "Ecuador":"🇪🇨","Türkiye":"🇹🇷","Egypt":"🇪🇬","Korea Republic":"🇰🇷","Algeria":"🇩🇿",
-  "Paraguay":"🇵🇾","DR Congo":"🇨🇩","Haiti":"🇭🇹","New Zealand":"🇳🇿","Qatar":"🇶🇦",
+  "Mexico":                  "mx",
+  "South Africa":            "za",
+  "Korea Republic":          "kr",
+  "Czechia":                 "cz",
+  "Canada":                  "ca",
+  "Bosnia and Herzegovina":  "ba",
+  "Qatar":                   "qa",
+  "Switzerland":             "ch",
+  "Brazil":                  "br",
+  "Morocco":                 "ma",
+  "Haiti":                   "ht",
+  "Scotland":                "gb-sct",
+  "United States":           "us",
+  "Paraguay":                "py",
+  "Australia":               "au",
+  "Türkiye":                 "tr",
+  "Germany":                 "de",
+  "Curaçao":                 "cw",
+  "Côte d'Ivoire":           "ci",
+  "Ecuador":                 "ec",
+  "Netherlands":             "nl",
+  "Japan":                   "jp",
+  "Sweden":                  "se",
+  "Tunisia":                 "tn",
+  "Spain":                   "es",
+  "Cape Verde":              "cv",
+  "Saudi Arabia":            "sa",
+  "Uruguay":                 "uy",
+  "France":                  "fr",
+  "Senegal":                 "sn",
+  "Iraq":                    "iq",
+  "Norway":                  "no",
+  "Argentina":               "ar",
+  "Algeria":                 "dz",
+  "Austria":                 "at",
+  "Jordan":                  "jo",
+  "Portugal":                "pt",
+  "DR Congo":                "cd",
+  "Uzbekistan":              "uz",
+  "Colombia":                "co",
+  "England":                 "gb-eng",
+  "Croatia":                 "hr",
+  "Ghana":                   "gh",
+  "Panama":                  "pa",
+  "Belgium":                 "be",
+  "Egypt":                   "eg",
+  "Iran":                    "ir",
+  "New Zealand":             "nz",
+  "Belgium":                 "be",
 };
 
 const AVATARS = {
@@ -315,70 +355,22 @@ function formatStage(s){
 
 // Use crest URLs from API data when available, fall back to emoji
 const CREST_CACHE = {};
-// Verified crest URLs from crests.football-data.org
-// Confirmed via native-stats.org which uses the same CDN
-const CRESTS = {
-  "Mexico":                 "https://crests.football-data.org/769.svg",
-  "South Africa":           "https://crests.football-data.org/9396.svg",
-  "Korea Republic":         "https://crests.football-data.org/772.png",
-  "Czechia":                "https://crests.football-data.org/798.svg",
-  "Canada":                 "https://crests.football-data.org/canada.svg",
-  "Bosnia and Herzegovina": "https://crests.football-data.org/bosnia.svg",
-  "Qatar":                  "https://crests.football-data.org/8030.svg",
-  "Switzerland":            "https://crests.football-data.org/788.svg",
-  "Brazil":                 "https://crests.football-data.org/764.svg",
-  "Morocco":                "https://crests.football-data.org/morocco.svg",
-  "Haiti":                  "https://crests.football-data.org/haiti.svg",
-  "Scotland":               "https://crests.football-data.org/814.svg",
-  "United States":          "https://crests.football-data.org/usa.svg",
-  "Paraguay":               "https://crests.football-data.org/761.svg",
-  "Australia":              "https://crests.football-data.org/779.svg",
-  "Türkiye":                "https://crests.football-data.org/803.svg",
-  "Germany":                "https://crests.football-data.org/759.svg",
-  "Curaçao":                "https://crests.football-data.org/curacao.svg",
-  "Côte d'Ivoire":          "https://crests.football-data.org/801.svg",
-  "Ecuador":                "https://crests.football-data.org/780.svg",
-  "Netherlands":            "https://crests.football-data.org/8601.svg",
-  "Japan":                  "https://crests.football-data.org/766.svg",
-  "Sweden":                 "https://crests.football-data.org/771.svg",
-  "Tunisia":                "https://crests.football-data.org/790.svg",
-  "Spain":                  "https://crests.football-data.org/760.svg",
-  "Cape Verde":             "https://crests.football-data.org/cabo-verde.svg",
-  "Saudi Arabia":           "https://crests.football-data.org/SAU.svg",
-  "Uruguay":                "https://crests.football-data.org/781.svg",
-  "France":                 "https://crests.football-data.org/773.svg",
-  "Senegal":                "https://crests.football-data.org/SEN.svg",
-  "Iraq":                   "https://crests.football-data.org/IRQ.svg",
-  "Norway":                 "https://crests.football-data.org/785.svg",
-  "Argentina":              "https://crests.football-data.org/762.svg",
-  "Algeria":                "https://crests.football-data.org/ALG.svg",
-  "Austria":                "https://crests.football-data.org/816.svg",
-  "Jordan":                 "https://crests.football-data.org/JOR.svg",
-  "Portugal":               "https://crests.football-data.org/765.svg",
-  "DR Congo":               "https://crests.football-data.org/COD.svg",
-  "Uzbekistan":             "https://crests.football-data.org/UZB.svg",
-  "Colombia":               "https://crests.football-data.org/776.svg",
-  "England":                "https://crests.football-data.org/770.svg",
-  "Croatia":                "https://crests.football-data.org/799.svg",
-  "Ghana":                  "https://crests.football-data.org/GHA.svg",
-  "Panama":                 "https://crests.football-data.org/PAN.svg",
-  "Belgium":                "https://crests.football-data.org/805.svg",
-  "Egypt":                  "https://crests.football-data.org/EGY.svg",
-  "Iran":                   "https://crests.football-data.org/IRN.svg",
-  "New Zealand":            "https://crests.football-data.org/NZL.svg",
-  "New Zealand":            "https://crests.football-data.org/NZL.svg",
-};
+// Flag URLs handled by FLAGS map above
+const CRESTS = {};
 
 function teamImg(teamName, crestUrl, size){
   const n = norm(teamName);
+  const code = FLAGS[n];
   const sz = size||"2rem";
-  // Priority: API-provided crest > our CRESTS map > cached > emoji
-  const url = crestUrl || CRESTS[n] || null;
-  if(url) CREST_CACHE[n] = url;
-  if(CREST_CACHE[n]) {
-    return `<img src="${CREST_CACHE[n]}" style="width:${sz};height:${sz};object-fit:contain;" onerror="this.style.display='none'">`;
+  const h = sz === "20px" ? "15px" : (sz === "1.5rem" ? "1.1rem" : "1.5rem");
+  if(code){
+    return `<span class="fi fi-${code}" style="width:${sz};height:${h};border-radius:2px;display:inline-block;background-size:cover;"></span>`;
   }
-  return `<span style="font-size:1.4rem;line-height:1">${FLAGS[n]||"🏳"}</span>`;
+  // Fallback to API crest image
+  if(crestUrl){
+    return `<img src="${crestUrl}" style="width:${sz};height:${sz};object-fit:contain;" onerror="this.style.display='none'">`;
+  }
+  return `<span>🏳</span>`;
 }
 
 // Tiebreaker order: Greg > Chris > Yeti
@@ -403,7 +395,11 @@ const FIFA_RANK = {
 function teamRank(name){ return FIFA_RANK[norm(name)] || 999; }
 
 function norm(n){ return NORM[n]||n; }
-function flag(n){ return FLAGS[norm(n)]||"🏳"; }
+function flag(n){
+  const code = FLAGS[norm(n)];
+  if(code) return `<span class="fi fi-${code}" style="width:20px;height:15px;border-radius:1px;display:inline-block;background-size:cover;vertical-align:middle;"></span>`;
+  return "🏳";
+}
 function getDrafter(name){
   const n=norm(name);
   for(const [d,teams] of Object.entries(DRAFT)) if(teams.includes(n)) return d;
@@ -784,7 +780,7 @@ function renderBracket(data){
       const advStyle = i<2 ? 'border-left:3px solid var(--green)' : '';
       html += `<tr style="border-top:1px solid var(--border);${advStyle}">
         <td style="padding:5px 8px;display:flex;align-items:center;gap:6px;">
-          <img src="${CRESTS[norm(team)]||''}" style="width:20px;height:20px;object-fit:contain;" onerror="this.style.display='none'">
+          ${teamImg(team, null, "20px")}
           <span>${team}</span>
           ${d?`<span style="font-size:.6rem;color:var(--${dc_class}-col)">${d[0]}</span>`:''}
         </td>
