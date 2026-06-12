@@ -319,9 +319,10 @@ function renderMover(completed){
     return;
   }
   const f=completed[completed.length-1];
-  const home=norm(f.teams.home.name);
-  const away=norm(f.teams.away.name);
-  const hg=f.goals.home??0, ag=f.goals.away??0;
+  const home=norm(f.homeTeam?.name||"");
+  const away=norm(f.awayTeam?.name||"");
+  const hg=f.score?.fullTime?.home??0;
+  const ag=f.score?.fullTime?.away??0;
   document.getElementById("moverHeadline").textContent=`${flag(home)} ${home} ${hg}–${ag} ${away} ${flag(away)}`;
   const winner=hg>ag?home:ag>hg?away:null;
   const wd=winner?getDrafter(winner):null;
