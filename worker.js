@@ -3,7 +3,7 @@
 // Smart schedule-aware polling — zero requests outside match windows
 // One API call per cycle pulls everything: live, completed, upcoming
 // ============================================================
- // v4
+
 const API_BASE  = "https://api.football-data.org/v4";
 
 const COMPETITION = "WC";
@@ -251,13 +251,21 @@ export default {
           return new Response(JSON.stringify(cached), { headers: CORS });
         }
 
-        // Outside window, no cache
-        return new Response(JSON.stringify({
-          updated: new Date().toISOString(),
-          fixtures: { live: [], today: [], yesterday: [], tomorrow: [], completed: [] },
-          idle: true,
-          nextWindow: msUntilNextWindow(nowMs),
-        }), { headers: CORS });
+        // Outside window, no cache — fetch once and store for 12 hours
+        // This prevents the site going blank between match windows
+        try {
+          const fixtures = await fetchAllFixtures(env);
+          const payload  = { updated: new Date().toISOString(), fixtures };
+          await env.COTECUP_CACHE.put("payload", JSON.stringify(payload), { expirationTtl: 43200 });
+          return new Response(JSON.stringify(payload), { headers: CORS });
+        } catch (err) {
+          return new Response(JSON.stringify({
+            updated: new Date().toISOString(),
+            fixtures: { live: [], today: [], yesterday: [], tomorrow: [], completed: [] },
+            idle: true,
+            nextWindow: msUntilNextWindow(nowMs),
+          }), { headers: CORS });
+        }
 
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: CORS });
