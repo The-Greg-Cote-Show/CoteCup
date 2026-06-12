@@ -27,6 +27,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .last-updated{font-size:.7rem;color:var(--muted);}
 .refresh-btn{background:none;border:1px solid var(--border2);color:var(--muted);font-size:.72rem;padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .15s;}
 .refresh-btn:hover{color:var(--text);border-color:var(--gold);}
+.nav-btn{background:none;border:none;color:var(--muted);font-size:.75rem;padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .15s;}
+.nav-btn.active{background:var(--surface3,var(--panel3));color:var(--text);font-weight:600;}
+.nav-btn:hover:not(.active){color:var(--text);}
 
 .dashboard{display:grid;grid-template-columns:280px 1fr 300px;gap:1rem;padding:1rem 1.25rem;min-height:calc(100vh - 64px);}
 
@@ -118,6 +121,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .breakdown-team{flex:1;color:var(--text);}
 .breakdown-drafter{font-size:.65rem;padding:1px 6px;border-radius:4px;margin-right:6px;}
 .breakdown-pts{font-weight:700;min-width:28px;text-align:right;}
+.match-pts{font-size:.65rem;font-weight:700;padding:2px 6px;border-radius:4px;margin-top:3px;display:inline-block;}
+.pts-yeti{background:rgba(167,139,250,.15);color:var(--yeti-col);}
+.pts-chris{background:rgba(56,189,248,.15);color:var(--chris-col);}
+.pts-greg{background:rgba(251,146,60,.15);color:var(--greg-col);}
 
 @media(max-width:1000px){.dashboard{grid-template-columns:1fr 1fr;}.left-col{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;}.leader-card,.mover-card,.rules-card{flex:1 1 250px;}}
 
@@ -158,6 +165,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <div class="header-right">
     <div class="live-dot"></div>
     <span class="last-updated" id="lastUpdated">Loading...</span>
+    <div style="display:flex;gap:4px;background:var(--panel2);padding:3px;border-radius:8px;">
+      <button class="nav-btn active" id="navMain" onclick="showView('main')">Live</button>
+      <button class="nav-btn" id="navHistory" onclick="showView('history')">History</button>
+    </div>
     <button class="refresh-btn" onclick="fetchData()">Refresh</button>
   </div>
 </div>
@@ -214,6 +225,15 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
   </div>
 
+</div>
+
+<!-- HISTORY VIEW -->
+<div id="historyView" style="display:none;max-width:1100px;margin:0 auto;padding:1.5rem;">
+  <div style="margin-bottom:1rem;">
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:.25rem;">Tournament History</div>
+    <div style="font-size:.8rem;color:var(--muted);">All completed matches and running point totals</div>
+  </div>
+  <div id="historyContent"></div>
 </div>
 
 <script>
@@ -410,20 +430,56 @@ function makeMatchCard(f){
   const hd=getDrafter(home); const ad=getDrafter(away);
   const local=localTime(f.utcDate);
   const utcStr=new Date(f.utcDate).toISOString().slice(11,16)+" UTC";
-  const statusHtml=isLive?`<span class="match-status-live">${min||""}′</span>`:
-    isFT?`<span class="match-status-ft">Full Time</span>`:
-    `<span class="match-status-sched">${local} <span class="local-time">${utcStr}</span></span>`;
+  // Build detailed live status
+  let statusHtml;
+  if(isLive){
+    const isPaused = f.status==="PAUSED";
+    const isET     = f.status==="EXTRA_TIME";
+    const isPKS    = f.status==="PENALTY_SHOOTOUT";
+    let label="";
+    if(isPaused)      label="Half Time";
+    else if(isPKS)    label="Penalties";
+    else if(isET)     label=`ET ${min||""}′`;
+    else {
+      const half = (min||0)>45?"2nd Half":"1st Half";
+      const inj  = f.injuryTime ? `+${f.injuryTime}` : "";
+      label = `${half} ${min||""}${inj}′`;
+    }
+    statusHtml=`<span class="match-status-live">${label}</span>`;
+  } else if(isFT){
+    const dur = f.score?.duration||"REGULAR";
+    const endLabel = dur==="PENALTY_SHOOTOUT"?"After Pens":dur==="EXTRA_TIME"?"After ET":"Full Time";
+    statusHtml=`<span class="match-status-ft">${endLabel}</span>`;
+  } else {
+    statusHtml=`<span class="match-status-sched">${local} <span class="local-time">${utcStr}</span></span>`;
+  }
   const scoreHtml=isLive?`<div class="score-display live">${hg}–${ag}</div>`:
     isFT?`<div class="score-display ft">${hg}–${ag}</div>`:
     `<div class="score-display sched">vs</div>`;
+
+  // Calculate points earned for completed matches
+  function ptsFor(goals, isWinner, isDraw, isKO){
+    let p = goals;
+    if(!isKO){ if(isWinner) p+=3; else if(isDraw) p+=1; }
+    else { if(isWinner) p+=5; }
+    return p;
+  }
+  let homePts="", awayPts="";
+  if(isFT){
+    const isKO = !((f.stage||"").toLowerCase().includes("group"));
+    const homeWin = hg>ag, awayWin = ag>hg, isDraw = hg===ag;
+    homePts = `<span class="match-pts ${hd?`pts-${DC[hd]}`:''}">${hd?hd[0]:"?"} +${ptsFor(hg,homeWin,isDraw,isKO)}</span>`;
+    awayPts = `<span class="match-pts ${ad?`pts-${DC[ad]}`:''}">${ad?ad[0]:"?"} +${ptsFor(ag,awayWin,isDraw,isKO)}</span>`;
+  }
+
   const ht=hd?`<div class="team-drafter drafter-${DC[hd]}">${hd}</div>`:"";
   const at=ad?`<div class="team-drafter drafter-${DC[ad]}">${ad}</div>`:"";
   return `<div class="match-card ${isLive?"live":""}">
     <div class="match-top"><span>${formatStage(f.stage||f.matchday||"Group Stage")}</span>${statusHtml}</div>
     <div class="match-body">
-      <div class="match-team"><div class="team-flag">${teamImg(home,homeCrest)}</div><div class="team-name">${home}</div>${ht}</div>
+      <div class="match-team"><div class="team-flag">${teamImg(home,homeCrest)}</div><div class="team-name">${home}</div>${ht}${homePts}</div>
       <div class="match-score-center">${scoreHtml}</div>
-      <div class="match-team"><div class="team-flag">${teamImg(away,awayCrest)}</div><div class="team-name">${away}</div>${at}</div>
+      <div class="match-team"><div class="team-flag">${teamImg(away,awayCrest)}</div><div class="team-name">${away}</div>${at}${awayPts}</div>
     </div></div>`;
 }
 
@@ -517,12 +573,82 @@ function renderBreakdown(teamPts){
   }).join("");
 }
 
+function showView(view){
+  const main = document.querySelector('.dashboard');
+  const hist = document.getElementById('historyView');
+  const navMain = document.getElementById('navMain');
+  const navHist = document.getElementById('navHistory');
+  if(view==='history'){
+    main.style.display='none';
+    hist.style.display='block';
+    navMain.classList.remove('active');
+    navHist.classList.add('active');
+    renderHistory(window._lastData);
+  } else {
+    main.style.display='';
+    hist.style.display='none';
+    navMain.classList.add('active');
+    navHist.classList.remove('active');
+  }
+}
+
+function renderHistory(data){
+  const el = document.getElementById('historyContent');
+  if(!el) return;
+  if(!data){ el.innerHTML='<p style="color:var(--muted);font-size:.85rem">No data yet</p>'; return; }
+
+  const completed = (data.fixtures?.completed||[]).sort((a,b)=>new Date(b.utcDate)-new Date(a.utcDate));
+  if(!completed.length){ el.innerHTML='<p style="color:var(--muted);font-size:.85rem">No completed matches yet</p>'; return; }
+
+  // Group by date (local)
+  const byDate = {};
+  completed.forEach(f=>{
+    const d = new Date(f.utcDate).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+    if(!byDate[d]) byDate[d]=[];
+    byDate[d].push(f);
+  });
+
+  let html='';
+  for(const [date, matches] of Object.entries(byDate)){
+    html+=`<div style="margin-bottom:1.5rem;">
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);padding:.5rem 0;border-bottom:1px solid var(--border);margin-bottom:.5rem;">${date}</div>
+      <div style="display:flex;flex-direction:column;gap:4px;">`;
+    matches.forEach(f=>{
+      const home=norm(f.homeTeam?.name||'');
+      const away=norm(f.awayTeam?.name||'');
+      const hg=f.score?.fullTime?.home??0;
+      const ag=f.score?.fullTime?.away??0;
+      const hd=getDrafter(home); const ad=getDrafter(home);
+      const adAway=getDrafter(away);
+      const isKO=!((f.stage||'').toLowerCase().includes('group'));
+      const homeWin=hg>ag,awayWin=ag>hg,isDraw=hg===ag;
+      const homePts=(hg)+(isKO?(homeWin?5:0):(homeWin?3:isDraw?1:0));
+      const awayPts=(ag)+(isKO?(awayWin?5:0):(awayWin?3:isDraw?1:0));
+      const dur=f.score?.duration||'REGULAR';
+      const endLabel=dur==='PENALTY_SHOOTOUT'?'Pens':dur==='EXTRA_TIME'?'ET':'FT';
+      html+=`<div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem;display:flex;align-items:center;gap:.5rem;font-size:.82rem;">
+        <span style="color:var(--muted);font-size:.65rem;min-width:22px">${endLabel}</span>
+        <span class="adv-indicator ${hd?DC[hd]:''}" style="width:8px;height:8px;border-radius:50%;background:${hd?`var(--${DC[hd]}-col)`:'var(--border2)'};flex-shrink:0"></span>
+        <span style="flex:1;font-weight:500;">${teamImg(home,f.homeTeam?.crest)} ${home}</span>
+        <span style="font-weight:800;min-width:40px;text-align:center;">${hg}–${ag}</span>
+        <span style="flex:1;text-align:right;font-weight:500;">${away} ${teamImg(away,f.awayTeam?.crest)}</span>
+        <span class="adv-indicator ${adAway?DC[adAway]:''}" style="width:8px;height:8px;border-radius:50%;background:${adAway?`var(--${DC[adAway]}-col)`:'var(--border2)'};flex-shrink:0"></span>
+        <span style="font-size:.65rem;color:var(--${hd?DC[hd]:'muted'}-col,var(--muted));min-width:40px;text-align:right">${hd?hd[0]:''} +${homePts}</span>
+        <span style="font-size:.65rem;color:var(--${adAway?DC[adAway]:'muted'}-col,var(--muted));min-width:40px;text-align:right">${adAway?adAway[0]:''} +${awayPts}</span>
+      </div>`;
+    });
+    html+='</div></div>';
+  }
+  el.innerHTML=html;
+}
+
 async function fetchData(){
   try{
     document.getElementById("lastUpdated").textContent="Refreshing...";
     const res=await fetch(WORKER_URL);
     if(!res.ok) throw new Error(`Worker error ${res.status}`);
     const data=await res.json();
+    window._lastData = data;
     const {pts,teamPts}=computeScores(data.fixtures.completed||[]);
     const sorted=renderStandings(pts);
     renderLeader(sorted);
