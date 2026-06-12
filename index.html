@@ -59,6 +59,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .center-col{display:flex;flex-direction:column;gap:1rem;}
 .pitch-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;align-items:start;}
 .pitch-col{display:flex;flex-direction:column;gap:4px;}
+.pitch-col.yd{order:1;}
+.pitch-col.today{order:2;}
+.pitch-col.tm{order:3;}
 .pitch-col-header{padding:.7rem 1rem;background:var(--panel);border:1px solid var(--border);border-radius:10px;font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px;}
 
 .no-matches{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:3rem 2rem;text-align:center;color:var(--muted);}
@@ -124,10 +127,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   .header-right .last-updated{display:none;}
   .dashboard{display:flex;flex-direction:column;padding:.75rem;gap:.75rem;}
   .left-col{display:none;}
-  .right-col{order:-1;}
-  .standings-card{border-radius:10px;}
+  .right-col{order:1;}
+  .standings-card{border-radius:10px;order:1;}
   .team-breakdown{display:none;}
-  .center-col{order:0;}
+  .center-col{order:2;}
   .pitch-grid{grid-template-columns:1fr;gap:.75rem;}
   .score-display{font-size:1.5rem;}
   .match-body{padding:.75rem;}
@@ -135,6 +138,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   .team-name{font-size:.75rem;}
   .drafter-standing{padding:.7rem .75rem;}
   .standing-pts{font-size:1.1rem;}
+  .pitch-grid{grid-template-columns:1fr;}
+  .pitch-col.yd{order:4;}
+  .pitch-col.today{order:1;}
+  .pitch-col.tm{order:2;}
 }
 </style>
 </head>
@@ -229,6 +236,9 @@ const NORM = {
   "Cabo Verde":"Cape Verde",
   "Curaçao":"Curaçao","Curacao":"Curaçao",
   "Bosnia and Herzegovina":"Bosnia and Herzegovina",
+  "Bosnia-Herzegovina":"Bosnia and Herzegovina",
+  "Bosnia & Herzegovina":"Bosnia and Herzegovina",
+  "Bosnia-Herzegowina":"Bosnia and Herzegovina",
 };
 
 const FLAGS = {
@@ -466,9 +476,9 @@ function renderMatches(today, live, yesterday, tomorrow){
   }
 
   col.innerHTML=`<div class="pitch-grid">
-    <div class="pitch-col">${ydHtml}</div>
-    <div class="pitch-col">${todayHtml}</div>
-    <div class="pitch-col">${tmHtml}</div>
+    <div class="pitch-col yd">${ydHtml}</div>
+    <div class="pitch-col today">${todayHtml}</div>
+    <div class="pitch-col tm">${tmHtml}</div>
   </div>`;
 }
 
@@ -517,7 +527,33 @@ async function fetchData(){
     const sorted=renderStandings(pts);
     renderLeader(sorted);
     renderMover(data.fixtures.completed||[]);
-    renderMatches(data.fixtures.today||[], data.fixtures.live||[], data.fixtures.yesterday||[], data.fixtures.tomorrow||[]);
+    // Re-bucket matches by LOCAL date, not UTC date
+    const allMatches = [
+      ...(data.fixtures.today||[]),
+      ...(data.fixtures.yesterday||[]),
+      ...(data.fixtures.tomorrow||[]),
+      ...(data.fixtures.completed||[]).filter(f=>{
+        // Include completed matches from the last 2 days not already in today/yesterday
+        const d = new Date(f.utcDate);
+        const now = new Date();
+        return (now - d) < 2 * 24 * 60 * 60 * 1000;
+      })
+    ];
+    // Deduplicate
+    const seen = new Set();
+    const uniq = allMatches.filter(f=>{ if(seen.has(f.id)) return false; seen.add(f.id); return true; });
+
+    const localToday = new Date().toLocaleDateString("en-CA");
+    const localYd    = new Date(Date.now() - 86400000).toLocaleDateString("en-CA");
+    const localTm    = new Date(Date.now() + 86400000).toLocaleDateString("en-CA");
+
+    const toLocal = f => new Date(f.utcDate).toLocaleDateString("en-CA");
+    const todayLocal     = uniq.filter(f => toLocal(f) === localToday && !["IN_PLAY","PAUSED"].includes(f.status));
+    const liveLocal      = (data.fixtures.live||[]);
+    const yesterdayLocal = uniq.filter(f => toLocal(f) === localYd);
+    const tomorrowLocal  = uniq.filter(f => toLocal(f) === localTm);
+
+    renderMatches(todayLocal, liveLocal, yesterdayLocal, tomorrowLocal);
     renderBreakdown(teamPts);
     const d=new Date(data.updated);
     document.getElementById("lastUpdated").textContent="Updated "+d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
