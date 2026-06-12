@@ -117,7 +117,25 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .breakdown-pts{font-weight:700;min-width:28px;text-align:right;}
 
 @media(max-width:1000px){.dashboard{grid-template-columns:1fr 1fr;}.left-col{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;}.leader-card,.mover-card,.rules-card{flex:1 1 250px;}}
-@media(max-width:650px){.dashboard{grid-template-columns:1fr;}.left-col{flex-direction:column;}}
+
+@media(max-width:650px){
+  .header{flex-wrap:wrap;gap:.5rem;padding:.75rem 1rem;}
+  .header-left .title-main{font-size:1rem;}
+  .header-right .last-updated{display:none;}
+  .dashboard{display:flex;flex-direction:column;padding:.75rem;gap:.75rem;}
+  .left-col{display:none;}
+  .right-col{order:-1;}
+  .standings-card{border-radius:10px;}
+  .team-breakdown{display:none;}
+  .center-col{order:0;}
+  .pitch-grid{grid-template-columns:1fr;gap:.75rem;}
+  .score-display{font-size:1.5rem;}
+  .match-body{padding:.75rem;}
+  .team-flag img{width:1.5rem!important;height:1.5rem!important;}
+  .team-name{font-size:.75rem;}
+  .drafter-standing{padding:.7rem .75rem;}
+  .standing-pts{font-size:1.1rem;}
+}
 </style>
 </head>
 <body>
@@ -233,6 +251,26 @@ const AVATARS = {
 };
 
 const DC = {Yeti:"yeti",Chris:"chris",Greg:"greg"};
+
+function formatStage(s){
+  if(!s) return "Group Stage";
+  return s.replace(/_/g," ").replace(/\w/g,c=>c.toUpperCase())
+    .replace("Group Stage","Group Stage")
+    .replace("Round Of","Round of")
+    .replace("Quarter Finals","Quarterfinal")
+    .replace("Semi Finals","Semifinal")
+    .replace("3Rd Place Playoff","3rd Place")
+    .replace("Final","Final");
+}
+
+// Use crest URLs from API data when available, fall back to emoji
+const CREST_CACHE = {};
+function teamImg(teamName, crestUrl){
+  const n = norm(teamName);
+  if(crestUrl) CREST_CACHE[n] = crestUrl;
+  if(CREST_CACHE[n]) return `<img src="${CREST_CACHE[n]}" style="width:2rem;height:2rem;object-fit:contain;" onerror="this.style.display='none'">`;
+  return `<span style="font-size:1.8rem;line-height:1">${FLAGS[n]||"🏳"}</span>`;
+}
 
 // Tiebreaker order: Greg > Chris > Yeti
 const TIEBREAK = {Greg:0, Chris:1, Yeti:2};
@@ -352,6 +390,8 @@ function makeMatchCard(f){
     [hgRaw,agRaw]=[agRaw,hgRaw];
   }
   const home=norm(homeRaw); const away=norm(awayRaw);
+  const homeCrest=f.homeTeam?.crest||f.homeTeam?.flag||null;
+  const awayCrest=f.awayTeam?.crest||f.awayTeam?.flag||null;
   const s=f.status;
   const isLive=["IN_PLAY","PAUSED"].includes(s);
   const isFT=["FINISHED"].includes(s);
@@ -369,11 +409,11 @@ function makeMatchCard(f){
   const ht=hd?`<div class="team-drafter drafter-${DC[hd]}">${hd}</div>`:"";
   const at=ad?`<div class="team-drafter drafter-${DC[ad]}">${ad}</div>`:"";
   return `<div class="match-card ${isLive?"live":""}">
-    <div class="match-top"><span>${f.stage||"Group Stage"}</span>${statusHtml}</div>
+    <div class="match-top"><span>${formatStage(f.stage||f.matchday||"Group Stage")}</span>${statusHtml}</div>
     <div class="match-body">
-      <div class="match-team"><div class="team-flag">${flag(home)}</div><div class="team-name">${home}</div>${ht}</div>
+      <div class="match-team"><div class="team-flag">${teamImg(home,homeCrest)}</div><div class="team-name">${home}</div>${ht}</div>
       <div class="match-score-center">${scoreHtml}</div>
-      <div class="match-team"><div class="team-flag">${flag(away)}</div><div class="team-name">${away}</div>${at}</div>
+      <div class="match-team"><div class="team-flag">${teamImg(away,awayCrest)}</div><div class="team-name">${away}</div>${at}</div>
     </div></div>`;
 }
 
