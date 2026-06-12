@@ -61,6 +61,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .no-matches{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:3rem 2rem;text-align:center;color:var(--muted);}
 .no-matches-icon{font-size:2.5rem;margin-bottom:.75rem;}
 .no-matches h3{font-size:1rem;color:var(--text);margin-bottom:.4rem;}
+.pitch-section{margin-bottom:1rem;}
+.pitch-section-label{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);padding:.6rem 1rem;background:var(--panel);border:1px solid var(--border);border-radius:10px 10px 0 0;border-bottom:none;}
+.local-time{font-size:.65rem;color:var(--muted);margin-left:6px;font-weight:400;}
+.match-card:first-of-type{border-radius:0 0 0 0;}
+.match-card+.match-card{border-top:none;}
 
 .match-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
 .match-card.live{border-color:rgba(224,82,82,.4);}
@@ -328,50 +333,88 @@ function renderMover(completed){
   gainEl.style.display="inline-block";
 }
 
-function renderMatches(today, live){
-  const col=document.getElementById("centerCol");
-  // Merge live and today, deduplicate by fixture id, sort by kickoff time
-  const allMap={};
-  [...(live||[]),...(today||[])].forEach(f=>{ allMap[f.fixture.id]=f; });
-  const all=Object.values(allMap).sort((a,b)=>new Date(a.fixture.date)-new Date(b.fixture.date));
-  if(!all.length){
-    col.innerHTML=`<div class="panel"><div class="panel-header">&#9917; Today's Pitch</div></div>
-      <div class="no-matches"><div class="no-matches-icon">&#9917;</div>
-      <h3>No matches today</h3><p style="font-size:.8rem;margin-top:.4rem">Check back on the next match day</p></div>`;
-    return;
+function localTime(utcStr){
+  try{
+    const d=new Date(utcStr);
+    return d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",timeZoneName:"short"});
+  }catch(e){ return fmtTime(utcStr); }
+}
+
+function makeMatchCard(f){
+  let homeRaw=f.homeTeam.name, awayRaw=f.awayTeam.name;
+  let hgRaw=f.score?.fullTime?.home, agRaw=f.score?.fullTime?.away;
+  if(teamRank(homeRaw)>teamRank(awayRaw)){
+    [homeRaw,awayRaw]=[awayRaw,homeRaw];
+    [hgRaw,agRaw]=[agRaw,hgRaw];
   }
-  const cards=all.map(f=>{
-    // Higher ranked team always on left
-    let homeRaw=f.homeTeam.name, awayRaw=f.awayTeam.name;
-    let hgRaw=f.score.fullTime.home, agRaw=f.score.fullTime.away;
-    if(teamRank(homeRaw)>teamRank(awayRaw)){
-      [homeRaw,awayRaw]=[awayRaw,homeRaw];
-      [hgRaw,agRaw]=[agRaw,hgRaw];
-    }
-    const home=norm(homeRaw); const away=norm(awayRaw);
-    const s=f.status;
-    const isLive=["IN_PLAY","PAUSED"].includes(s);
-    const isFT=["FINISHED"].includes(s);
-    const hg=hgRaw??0; const ag=agRaw??0;
-    const min=f.minute||null;
-    const hd=getDrafter(home); const ad=getDrafter(away);
-    const statusHtml=isLive?`<span class="match-status-live">${min||""}′</span>`:
-      isFT?`<span class="match-status-ft">Full Time</span>`:
-      `<span class="match-status-sched">${fmtTime(f.utcDate)}</span>`;
-    const scoreHtml=isLive?`<div class="score-display live">${hg}–${ag}</div>`:
-      isFT?`<div class="score-display ft">${hg}–${ag}</div>`:
-      `<div class="score-display sched">vs</div>`;
-    const ht=hd?`<div class="team-drafter drafter-${DC[hd]}">${hd}</div>`:"";
-    const at=ad?`<div class="team-drafter drafter-${DC[ad]}">${ad}</div>`:"";
-    return `<div class="match-card ${isLive?"live":""}">
-      <div class="match-top"><span>${f.stage||"Group Stage"}</span>${statusHtml}</div>
-      <div class="match-body">
-        <div class="match-team"><div class="team-flag">${flag(home)}</div><div class="team-name">${home}</div>${ht}</div>
-        <div class="match-score-center">${scoreHtml}</div>
-        <div class="match-team"><div class="team-flag">${flag(away)}</div><div class="team-name">${away}</div>${at}</div>
-      </div></div>`;
-  }).join("");
-  col.innerHTML=`<div class="panel"><div class="panel-header">&#9917; Today's Pitch</div></div>${cards}`;
+  const home=norm(homeRaw); const away=norm(awayRaw);
+  const s=f.status;
+  const isLive=["IN_PLAY","PAUSED"].includes(s);
+  const isFT=["FINISHED"].includes(s);
+  const hg=hgRaw??0; const ag=agRaw??0;
+  const min=f.minute||null;
+  const hd=getDrafter(home); const ad=getDrafter(away);
+  const local=localTime(f.utcDate);
+  const utcStr=new Date(f.utcDate).toISOString().slice(11,16)+" UTC";
+  const statusHtml=isLive?`<span class="match-status-live">${min||""}′</span>`:
+    isFT?`<span class="match-status-ft">Full Time</span>`:
+    `<span class="match-status-sched">${local} <span class="local-time">${utcStr}</span></span>`;
+  const scoreHtml=isLive?`<div class="score-display live">${hg}–${ag}</div>`:
+    isFT?`<div class="score-display ft">${hg}–${ag}</div>`:
+    `<div class="score-display sched">vs</div>`;
+  const ht=hd?`<div class="team-drafter drafter-${DC[hd]}">${hd}</div>`:"";
+  const at=ad?`<div class="team-drafter drafter-${DC[ad]}">${ad}</div>`:"";
+  return `<div class="match-card ${isLive?"live":""}">
+    <div class="match-top"><span>${f.stage||"Group Stage"}</span>${statusHtml}</div>
+    <div class="match-body">
+      <div class="match-team"><div class="team-flag">${flag(home)}</div><div class="team-name">${home}</div>${ht}</div>
+      <div class="match-score-center">${scoreHtml}</div>
+      <div class="match-team"><div class="team-flag">${flag(away)}</div><div class="team-name">${away}</div>${at}</div>
+    </div></div>`;
+}
+
+function renderMatches(today, live, yesterday, tomorrow){
+  const col=document.getElementById("centerCol");
+  col.innerHTML="";
+
+  // Deduplicate live by id
+  const liveMap={};
+  (live||[]).forEach(f=>{ liveMap[f.id]=f; });
+  const liveArr=Object.values(liveMap).sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
+
+  // Today: split upcoming vs finished, exclude live
+  const todayUpcoming=(today||[]).filter(f=>!liveMap[f.id]&&f.status!=="FINISHED").sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
+  const todayFinished=(today||[]).filter(f=>!liveMap[f.id]&&f.status==="FINISHED").sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
+  const ydArr=(yesterday||[]).sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
+  const tmArr=(tomorrow||[]).sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
+
+  let html="";
+
+  if(liveArr.length){
+    html+=`<div class="panel"><div class="panel-header" style="color:var(--red)">&#128308; Live Now</div></div>`;
+    html+=liveArr.map(makeMatchCard).join("");
+  }
+  if(todayUpcoming.length){
+    html+=`<div class="panel" style="margin-top:${html?"1rem":"0"}"><div class="panel-header">&#9917; Today's Pitch</div></div>`;
+    html+=todayUpcoming.map(makeMatchCard).join("");
+  }
+  if(todayFinished.length){
+    html+=`<div class="panel" style="margin-top:1rem"><div class="panel-header">&#9989; Today's Results</div></div>`;
+    html+=todayFinished.map(makeMatchCard).join("");
+  }
+  if(!liveArr.length&&!todayUpcoming.length&&!todayFinished.length){
+    html+=`<div class="no-matches"><div class="no-matches-icon">&#9917;</div><h3>No matches today</h3></div>`;
+  }
+  if(ydArr.length){
+    html+=`<div class="panel" style="margin-top:1rem"><div class="panel-header" style="color:var(--muted)">&#128197; Yesterday's Results</div></div>`;
+    html+=ydArr.map(makeMatchCard).join("");
+  }
+  if(tmArr.length){
+    html+=`<div class="panel" style="margin-top:1rem"><div class="panel-header" style="color:var(--blue)">&#128336; Tomorrow's Fixtures</div></div>`;
+    html+=tmArr.map(makeMatchCard).join("");
+  }
+  if(!html) html=`<div class="no-matches"><div class="no-matches-icon">&#9917;</div><h3>Loading match data...</h3></div>`;
+  col.innerHTML=html;
 }
 
 function renderStandings(pts){
@@ -419,7 +462,7 @@ async function fetchData(){
     const sorted=renderStandings(pts);
     renderLeader(sorted);
     renderMover(data.fixtures.completed||[]);
-    renderMatches(data.fixtures.today||[], data.fixtures.live||[]);
+    renderMatches(data.fixtures.today||[], data.fixtures.live||[], data.fixtures.yesterday||[], data.fixtures.tomorrow||[]);
     renderBreakdown(teamPts);
     const d=new Date(data.updated);
     document.getElementById("lastUpdated").textContent="Updated "+d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
