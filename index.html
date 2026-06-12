@@ -554,9 +554,9 @@ function makeMatchCard(f){
   return `<div class="match-card ${isLive?"live":""}">
     <div class="match-top"><span>${formatStage(f.stage||f.matchday||"Group Stage")}</span>${statusHtml}</div>
     <div class="match-body">
-      <div class="match-team"><div class="team-flag">${teamImg(home,homeCrest)}</div><div class="team-name">${home}</div>${ht}${homePts}</div>
+      <div class="match-team"><div class="team-flag">${teamImg(home,homeCrest)}</div><div class="team-name">${home}</div>${isFT?(homePts||( hd?`<div class="team-drafter drafter-${DC[hd]}">${hd}</div>`:"")):(hd?`<div class="team-drafter drafter-${DC[hd]}">${hd}</div>`:"")}</div>
       <div class="match-score-center">${scoreHtml}</div>
-      <div class="match-team"><div class="team-flag">${teamImg(away,awayCrest)}</div><div class="team-name">${away}</div>${at}${awayPts}</div>
+      <div class="match-team"><div class="team-flag">${teamImg(away,awayCrest)}</div><div class="team-name">${away}</div>${isFT?(awayPts||(ad?`<div class="team-drafter drafter-${DC[ad]}">${ad}</div>`:"")):(ad?`<div class="team-drafter drafter-${DC[ad]}">${ad}</div>`:"")}</div>
     </div></div>`;
 }
 
@@ -728,6 +728,8 @@ function renderHistory(data){
     html+='</div></div>';
   }
   el.innerHTML=html;
+  // Render chart after HTML is set so offsetWidth is available
+  setTimeout(()=>renderStandingsChart(completed), 50);
 }
 
 // ── BRACKET RENDERER ──────────────────────────────────────────────────────────
@@ -782,7 +784,7 @@ function renderBracket(data){
       const advStyle = i<2 ? 'border-left:3px solid var(--green)' : '';
       html += `<tr style="border-top:1px solid var(--border);${advStyle}">
         <td style="padding:5px 8px;display:flex;align-items:center;gap:6px;">
-          <span style="font-size:1.1rem">${FLAGS[norm(team)]||"🏳"}</span>
+          <img src="${CRESTS[norm(team)]||''}" style="width:20px;height:20px;object-fit:contain;" onerror="this.style.display='none'">
           <span>${team}</span>
           ${d?`<span style="font-size:.6rem;color:var(--${dc_class}-col)">${d[0]}</span>`:''}
         </td>
