@@ -1,0 +1,7 @@
+name = "cotecup-worker"
+main = "worker.js"
+compatibility_date = "2026-06-11"
+
+[[kv_namespaces]]
+binding = "COTECUP_CACHE"
+id = "cd703741008f4273abf62675f39d0b62"
