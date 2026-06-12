@@ -261,11 +261,11 @@ function computeScores(completed){
   const advanced=new Set();
 
   completed.forEach(f=>{
-    const home=norm(f.teams.home.name);
-    const away=norm(f.teams.away.name);
-    const hg=f.goals.home??0;
-    const ag=f.goals.away??0;
-    const round=(f.league.round||"").toLowerCase();
+    const home=norm(f.homeTeam.name);
+    const away=norm(f.awayTeam.name);
+    const hg=f.score.fullTime.home??0;
+    const ag=f.score.fullTime.away??0;
+    const round=(f.stage||"").toLowerCase();
     const isKO=!round.includes("group");
 
     const add=(team,p)=>{
@@ -342,29 +342,29 @@ function renderMatches(today, live){
   }
   const cards=all.map(f=>{
     // Higher ranked team always on left
-    let homeRaw=f.teams.home.name, awayRaw=f.teams.away.name;
-    let hgRaw=f.goals.home, agRaw=f.goals.away;
+    let homeRaw=f.homeTeam.name, awayRaw=f.awayTeam.name;
+    let hgRaw=f.score.fullTime.home, agRaw=f.score.fullTime.away;
     if(teamRank(homeRaw)>teamRank(awayRaw)){
       [homeRaw,awayRaw]=[awayRaw,homeRaw];
       [hgRaw,agRaw]=[agRaw,hgRaw];
     }
     const home=norm(homeRaw); const away=norm(awayRaw);
-    const s=f.fixture.status.short;
-    const isLive=["1H","HT","2H","ET","P","LIVE"].includes(s);
-    const isFT=["FT","AET","PEN"].includes(s);
+    const s=f.status;
+    const isLive=["IN_PLAY","PAUSED"].includes(s);
+    const isFT=["FINISHED"].includes(s);
     const hg=hgRaw??0; const ag=agRaw??0;
-    const min=f.fixture.status.elapsed;
+    const min=f.minute||null;
     const hd=getDrafter(home); const ad=getDrafter(away);
     const statusHtml=isLive?`<span class="match-status-live">${min||""}′</span>`:
       isFT?`<span class="match-status-ft">Full Time</span>`:
-      `<span class="match-status-sched">${fmtTime(f.fixture.date)}</span>`;
+      `<span class="match-status-sched">${fmtTime(f.utcDate)}</span>`;
     const scoreHtml=isLive?`<div class="score-display live">${hg}–${ag}</div>`:
       isFT?`<div class="score-display ft">${hg}–${ag}</div>`:
       `<div class="score-display sched">vs</div>`;
     const ht=hd?`<div class="team-drafter drafter-${DC[hd]}">${hd}</div>`:"";
     const at=ad?`<div class="team-drafter drafter-${DC[ad]}">${ad}</div>`:"";
     return `<div class="match-card ${isLive?"live":""}">
-      <div class="match-top"><span>${f.league.round||"Group Stage"}</span>${statusHtml}</div>
+      <div class="match-top"><span>${f.stage||"Group Stage"}</span>${statusHtml}</div>
       <div class="match-body">
         <div class="match-team"><div class="team-flag">${flag(home)}</div><div class="team-name">${home}</div>${ht}</div>
         <div class="match-score-center">${scoreHtml}</div>
