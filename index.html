@@ -174,7 +174,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="refresh-btn" onclick="location.reload()">Refresh</button>
   </div>
   <div style="font-size:.6rem;color:var(--muted);text-align:right;padding-top:3px;">
-    ⚠️ Scores may be slightly delayed &bull; Data provided by the <a href="https://www.football-data.org" target="_blank" style="color:var(--muted);text-decoration:underline;">Football-Data.org API</a>
+    ⚠️ Scores may be slightly delayed
   </div>
 </div>
 
@@ -922,5 +922,8 @@ async function fetchData(){
 fetchData();
 setInterval(fetchData, 10*60*1000);
 </script>
+<div style="text-align:center;padding:1.5rem;font-size:.65rem;color:var(--muted);border-top:1px solid var(--border);margin-top:2rem;">
+  Data provided by the <a href="https://www.football-data.org" target="_blank" style="color:var(--muted);text-decoration:underline;">Football-Data.org API</a>
+</div>
 </body>
 </html>
