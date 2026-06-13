@@ -262,7 +262,7 @@ const DRAFT = {
 };
 
 const NORM = {
-  "Côte d'Ivoire":"Côte d'Ivoire","Cote d'Ivoire":"Côte d'Ivoire",
+  "Côte d'Ivoire":"Côte d'Ivoire","Cote d'Ivoire":"Côte d'Ivoire","Ivory Coast":"Côte d'Ivoire","ivory coast":"Côte d'Ivoire",
   "USA":"United States",
   "Korea Republic":"Korea Republic","South Korea":"Korea Republic",
   "Czechia":"Czechia",
@@ -304,6 +304,7 @@ const FLAGS = {
   "Germany":                 "de",
   "Curaçao":                 "cw",
   "Côte d'Ivoire":           "ci",
+  "Ivory Coast":             "ci",
   "Ecuador":                 "ec",
   "Netherlands":             "nl",
   "Japan":                   "jp",
@@ -396,7 +397,10 @@ const FIFA_RANK = {
 
 function teamRank(name){ return FIFA_RANK[norm(name)] || 999; }
 
-function norm(n){ return NORM[n]||n; }
+function norm(n){ 
+  if(!n) return n;
+  return NORM[n] || NORM[n.trim()] || n;
+}
 function flag(n){
   const code = FLAGS[norm(n)];
   if(code) return `<span class="fi fi-${code}" style="width:20px;height:15px;border-radius:1px;display:inline-block;background-size:cover;vertical-align:middle;"></span>`;
