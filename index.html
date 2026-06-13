@@ -166,15 +166,15 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <div class="header-right">
     <div class="live-dot"></div>
     <span class="last-updated" id="lastUpdated">Loading...</span>
-    <div style="display:flex;gap:4px;background:var(--panel2);padding:3px;border-radius:8px;">
-      <button class="nav-btn active" id="navMain" onclick="showView('main')">Live</button>
-      <button class="nav-btn" id="navHistory" onclick="showView('history')">History</button>
-      <button class="nav-btn" id="navBracket" onclick="showView('bracket')">Bracket</button>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+      <div style="display:flex;gap:4px;background:var(--panel2);padding:3px;border-radius:8px;">
+        <button class="nav-btn active" id="navMain" onclick="showView('main')">Live</button>
+        <button class="nav-btn" id="navHistory" onclick="showView('history')">History</button>
+        <button class="nav-btn" id="navBracket" onclick="showView('bracket')">Bracket</button>
+      </div>
+      <div style="font-size:.6rem;color:var(--muted);">⚠️ Scores may be slightly delayed</div>
     </div>
     <button class="refresh-btn" onclick="location.reload()">Refresh</button>
-  </div>
-  <div style="font-size:.6rem;color:var(--muted);text-align:right;padding-top:3px;">
-    ⚠️ Scores may be slightly delayed
   </div>
 </div>
 
@@ -925,5 +925,6 @@ setInterval(fetchData, 10*60*1000);
 <div style="text-align:center;padding:1.5rem;font-size:.65rem;color:var(--muted);border-top:1px solid var(--border);margin-top:2rem;">
   Data provided by the <a href="https://www.football-data.org" target="_blank" style="color:var(--muted);text-decoration:underline;">Football-Data.org API</a>
 </div>
+<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "e434594dec3e43f0865f2dfd72c4078e"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
