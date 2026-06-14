@@ -256,7 +256,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 const WORKER_URL = "https://cotecup-worker.yeti-f3c.workers.dev/data";
 
 const DRAFT = {
-  Yeti:  ["Côte d'Ivoire","Colombia","United States","Morocco","Belgium","Sweden","Senegal","Canada","Australia","Iran","Cabo Verde","Panama","Jordan","Uzbekistan","South Africa","Curaçao"],
+  Yeti:  ["Côte d'Ivoire","Colombia","United States","Morocco","Belgium","Sweden","Senegal","Canada","Australia","Iran","Cape Verde","Panama","Jordan","Uzbekistan","South Africa","Curaçao"],
   Chris: ["France","Argentina","Portugal","Netherlands","Norway","Japan","Mexico","Switzerland","Austria","Scotland","Czechia","Ghana","Tunisia","Bosnia and Herzegovina","Saudi Arabia","Iraq"],
   Greg:  ["Spain","England","Brazil","Germany","Uruguay","Croatia","Ecuador","Türkiye","Egypt","Korea Republic","Algeria","Paraguay","DR Congo","Haiti","New Zealand","Qatar"]
 };
@@ -296,11 +296,9 @@ const NORM = {
   "USA":                     "United States",
   "United States of America":"United States",
   // Cape Verde — API may return "Cabo Verde"
-  "Cape Verde":              "Cabo Verde",
-  "Cabo Verde":              "Cabo Verde",
-  "Cape Verde Islands":      "Cabo Verde",
-  "Cape Verde"               "Cabo Verde",
-  "Cabo Verde Islands":      "Cabo Verde",
+  "Cape Verde":              "Cape Verde",
+  "Cabo Verde":              "Cape Verde",
+  "Cape Verde Islands":      "Cape Verde",
   // Curaçao — API may drop the accent
   "Curaçao":                 "Curaçao",
   "Curacao":                 "Curaçao",
@@ -384,7 +382,7 @@ const FLAGS = {
   "Sweden":                  "se",
   "Tunisia":                 "tn",
   "Spain":                   "es",
-  "Cabo Verde":              "cv",
+  "Cape Verde":              "cv",
   "Saudi Arabia":            "sa",
   "Uruguay":                 "uy",
   "France":                  "fr",
@@ -463,7 +461,7 @@ const FIFA_RANK = {
   "Egypt":34,"Ghana":35,"Tunisia":36,"Scotland":37,"Paraguay":38,
   "Iran":39,"Côte d'Ivoire":40,"DR Congo":41,"Uzbekistan":42,
   "Canada":43,"Bolivia":44,"Jordan":45,"Iraq":46,"Saudi Arabia":47,
-  "South Africa":48,"Cabo Verde":50,"Bosnia and Herzegovina":64,
+  "South Africa":48,"Cape Verde":50,"Bosnia and Herzegovina":64,
   "Curaçao":79,"Qatar":80,"Panama":82,"New Zealand":95,
   "Haiti":110,"Uzbekistan":68
 };
@@ -816,7 +814,7 @@ const GROUPS = {
   E:["Germany","Curaçao","Côte d'Ivoire","Ecuador"],
   F:["Netherlands","Japan","Sweden","Tunisia"],
   G:["Belgium","Egypt","Iran","New Zealand"],
-  H:["Spain","Cabo Verde","Saudi Arabia","Uruguay"],
+  H:["Spain","Cape Verde","Saudi Arabia","Uruguay"],
   I:["France","Senegal","Iraq","Norway"],
   J:["Argentina","Algeria","Austria","Jordan"],
   K:["Portugal","DR Congo","Uzbekistan","Colombia"],
