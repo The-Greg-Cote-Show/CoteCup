@@ -191,6 +191,18 @@ async function fetchAllFixtures(env) {
   };
 }
 
+
+// ── VISITOR GEO LOGGING ───────────────────────────────────────────────────────
+async function logVisitor(env, country, region) {
+  try {
+    const key = "visitor_stats";
+    const existing = await env.COTECUP_CACHE.get(key, "json") || {};
+    if (!existing[country]) existing[country] = {};
+    existing[country][region] = (existing[country][region] || 0) + 1;
+    await env.COTECUP_CACHE.put(key, JSON.stringify(existing));
+  } catch (_) {}
+}
+
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
 export default {
   async fetch(request, env, ctx) {
@@ -229,7 +241,13 @@ export default {
       }
     }
 
-    if (url.pathname === "/data") {
+    if (url.pathname === "/visitors") {
+      const stats = await env.COTECUP_CACHE.get("visitor_stats", "json") || {};
+      // Sort US states for readability
+      return new Response(JSON.stringify(stats, null, 2), { headers: CORS });
+    }
+
+        if (url.pathname === "/data") {
       try {
         const nowMs    = Date.now();
         const inWindow = isMatchWindow(nowMs);
@@ -238,7 +256,12 @@ export default {
         let cached = null;
         try { cached = await env.COTECUP_CACHE.get("payload", "json"); } catch (_) {}
 
-        // In window with no cache — fetch fresh
+        // Log visitor geo (non-blocking)
+        const country = request.cf?.country || "XX";
+        const region  = request.cf?.regionCode || request.cf?.region || "??";
+        ctx.waitUntil(logVisitor(env, country, region));
+
+                // In window with no cache — fetch fresh
         if (inWindow && !cached) {
           const fixtures = await fetchAllFixtures(env);
           const payload  = { updated: new Date().toISOString(), fixtures };
