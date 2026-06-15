@@ -182,7 +182,7 @@ async function fetchAllFixtures(env) {
   const tm    = new Date(+now + 86400000).toISOString().slice(0, 10);
 
   return {
-    live:      all.filter(f => ["IN_PLAY","PAUSED"].includes(f.status)),
+    live:      all.filter(f => ["IN_PLAY","PAUSED","LIVE"].includes(f.status)),
     today:     all.filter(f => f.utcDate.slice(0, 10) === today),
     yesterday: all.filter(f => f.utcDate.slice(0, 10) === yd),
     tomorrow:  all.filter(f => f.utcDate.slice(0, 10) === tm),
@@ -242,7 +242,7 @@ export default {
         if (inWindow && !cached) {
           const fixtures = await fetchAllFixtures(env);
           const payload  = { updated: new Date().toISOString(), fixtures };
-          try { await env.COTECUP_CACHE.put("payload", JSON.stringify(payload), { expirationTtl: 600 }); } catch (_) {}
+          try { await env.COTECUP_CACHE.put("payload", JSON.stringify(payload), { expirationTtl: 60 }); } catch (_) {}
           return new Response(JSON.stringify(payload), { headers: CORS });
         }
 
@@ -298,7 +298,7 @@ export default {
       const fixtures = await fetchAllFixtures(env);
       const payload  = { updated: new Date().toISOString(), fixtures };
       // During catch-up, use longer TTL so results persist all day
-      const ttl = isCatchUp ? 3600 * 12 : 600;
+      const ttl = isCatchUp ? 3600 * 12 : 60;
       await env.COTECUP_CACHE.put("payload", JSON.stringify(payload), {
         expirationTtl: ttl,
       });
