@@ -174,7 +174,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <button class="refresh-btn" onclick="location.reload()">Refresh</button>
   </div>
 </div>
-<div style="text-align:right;padding:2px 1.5rem;font-size:.58rem;color:var(--muted);background:var(--panel);border-bottom:1px solid var(--border2);">⚠️ Scores may be slightly delayed</div>
+
 
 <div class="dashboard">
 
@@ -256,7 +256,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 const WORKER_URL = "https://cotecup-worker.yeti-f3c.workers.dev/data";
 
 const DRAFT = {
-  Yeti:  ["Côte d'Ivoire","Colombia","United States","Morocco","Belgium","Sweden","Senegal","Canada","Australia","Iran","Cape Verde","Panama","Jordan","Uzbekistan","South Africa","Curaçao"],
+  Yeti:  ["Côte d'Ivoire","Colombia","United States","Morocco","Belgium","Sweden","Senegal","Canada","Australia","Iran","Cabo Verde","Panama","Jordan","Uzbekistan","South Africa","Curaçao"],
   Chris: ["France","Argentina","Portugal","Netherlands","Norway","Japan","Mexico","Switzerland","Austria","Scotland","Czechia","Ghana","Tunisia","Bosnia and Herzegovina","Saudi Arabia","Iraq"],
   Greg:  ["Spain","England","Brazil","Germany","Uruguay","Croatia","Ecuador","Türkiye","Egypt","Korea Republic","Algeria","Paraguay","DR Congo","Haiti","New Zealand","Qatar"]
 };
@@ -295,10 +295,10 @@ const NORM = {
   "United States":           "United States",
   "USA":                     "United States",
   "United States of America":"United States",
-  // Cape Verde — API may return "Cabo Verde"
-  "Cape Verde":              "Cape Verde",
-  "Cabo Verde":              "Cape Verde",
-  "Cape Verde Islands":      "Cape Verde",
+  // Cabo Verde — API may return "Cape Verde", "Cabo Verde", or "Cape Verde Islands"
+  "Cape Verde":              "Cabo Verde",
+  "Cabo Verde":              "Cabo Verde",
+  "Cape Verde Islands":      "Cabo Verde",
   // Curaçao — API may drop the accent
   "Curaçao":                 "Curaçao",
   "Curacao":                 "Curaçao",
@@ -382,7 +382,7 @@ const FLAGS = {
   "Sweden":                  "se",
   "Tunisia":                 "tn",
   "Spain":                   "es",
-  "Cape Verde":              "cv",
+  "Cabo Verde":              "cv",
   "Saudi Arabia":            "sa",
   "Uruguay":                 "uy",
   "France":                  "fr",
@@ -461,7 +461,7 @@ const FIFA_RANK = {
   "Egypt":34,"Ghana":35,"Tunisia":36,"Scotland":37,"Paraguay":38,
   "Iran":39,"Côte d'Ivoire":40,"DR Congo":41,"Uzbekistan":42,
   "Canada":43,"Bolivia":44,"Jordan":45,"Iraq":46,"Saudi Arabia":47,
-  "South Africa":48,"Cape Verde":50,"Bosnia and Herzegovina":64,
+  "South Africa":48,"Cabo Verde":50,"Bosnia and Herzegovina":64,
   "Curaçao":79,"Qatar":80,"Panama":82,"New Zealand":95,
   "Haiti":110,"Uzbekistan":68
 };
@@ -575,7 +575,7 @@ function makeMatchCard(f){
   const homeCrest=f.homeTeam?.crest||f.homeTeam?.flag||null;
   const awayCrest=f.awayTeam?.crest||f.awayTeam?.flag||null;
   const s=f.status;
-  const isLive=["IN_PLAY","PAUSED"].includes(s);
+  const isLive=["IN_PLAY","PAUSED","LIVE"].includes(s);
   const isFT=["FINISHED"].includes(s);
   const hg=hgRaw??0; const ag=agRaw??0;
   const min=f.minute||null;
@@ -814,7 +814,7 @@ const GROUPS = {
   E:["Germany","Curaçao","Côte d'Ivoire","Ecuador"],
   F:["Netherlands","Japan","Sweden","Tunisia"],
   G:["Belgium","Egypt","Iran","New Zealand"],
-  H:["Spain","Cape Verde","Saudi Arabia","Uruguay"],
+  H:["Spain","Cabo Verde","Saudi Arabia","Uruguay"],
   I:["France","Senegal","Iraq","Norway"],
   J:["Argentina","Algeria","Austria","Jordan"],
   K:["Portugal","DR Congo","Uzbekistan","Colombia"],
@@ -978,9 +978,9 @@ async function fetchData(){
     const toMatchDay = f => new Date(f.utcDate).toLocaleDateString("en-CA");
     const liveLocal      = (data.fixtures.live||[]);
     const liveIds        = new Set(liveLocal.map(f=>f.id));
-    const todayLocal     = uniq.filter(f => toMatchDay(f) === localToday && !liveIds.has(f.id) && f.status !== "IN_PLAY" && f.status !== "PAUSED");
+    const todayLocal     = uniq.filter(f => toMatchDay(f) === localToday && !liveIds.has(f.id) && f.status !== "IN_PLAY" && f.status !== "PAUSED" && f.status !== "LIVE");
     const yesterdayLocal = uniq.filter(f => toMatchDay(f) === localYd && !liveIds.has(f.id));
-    const tomorrowLocal  = uniq.filter(f => toMatchDay(f) === localTm && !liveIds.has(f.id) && f.status !== "FINISHED" && f.status !== "IN_PLAY" && f.status !== "PAUSED");
+    const tomorrowLocal  = uniq.filter(f => toMatchDay(f) === localTm && !liveIds.has(f.id) && f.status !== "FINISHED" && f.status !== "IN_PLAY" && f.status !== "PAUSED" && f.status !== "LIVE");
 
     renderMatches(todayLocal, liveLocal, yesterdayLocal, tomorrowLocal);
     renderBreakdown(teamPts);
