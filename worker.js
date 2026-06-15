@@ -193,13 +193,32 @@ async function fetchAllFixtures(env) {
 
 
 // ── VISITOR GEO LOGGING ───────────────────────────────────────────────────────
-async function logVisitor(env, country, region) {
+async function logVisitor(env, request) {
   try {
-    const key = "visitor_stats";
-    const existing = await env.COTECUP_CACHE.get(key, "json") || {};
-    if (!existing[country]) existing[country] = {};
-    existing[country][region] = (existing[country][region] || 0) + 1;
-    await env.COTECUP_CACHE.put(key, JSON.stringify(existing));
+    const cf      = request.cf || {};
+    const country = cf.country    || "XX";
+    const state   = cf.region     || cf.regionCode || "??";  // full name e.g. "Georgia"
+    const city    = cf.city       || "??";
+    const today   = new Date().toISOString().slice(0, 10);
+
+    const key  = "visitor_stats_v2";
+    const data = await env.COTECUP_CACHE.get(key, "json") || { daily: {}, geo: {} };
+
+    // Daily count
+    data.daily[today] = (data.daily[today] || 0) + 1;
+
+    // Geo: country → state → city
+    if (!data.geo[country])        data.geo[country]        = { _t: 0 };
+    data.geo[country]._t++;
+
+    if (!data.geo[country][state]) data.geo[country][state] = { _t: 0 };
+    data.geo[country][state]._t++;
+
+    if (city !== "??") {
+      data.geo[country][state][city] = (data.geo[country][state][city] || 0) + 1;
+    }
+
+    await env.COTECUP_CACHE.put(key, JSON.stringify(data));
   } catch (_) {}
 }
 
@@ -242,9 +261,8 @@ export default {
     }
 
     if (url.pathname === "/visitors") {
-      const stats = await env.COTECUP_CACHE.get("visitor_stats", "json") || {};
-      // Sort US states for readability
-      return new Response(JSON.stringify(stats, null, 2), { headers: CORS });
+      const stats = await env.COTECUP_CACHE.get("visitor_stats_v2", "json") || { daily: {}, geo: {} };
+      return new Response(JSON.stringify(stats), { headers: CORS });
     }
 
         if (url.pathname === "/data") {
@@ -256,10 +274,8 @@ export default {
         let cached = null;
         try { cached = await env.COTECUP_CACHE.get("payload", "json"); } catch (_) {}
 
-        // Log visitor geo (non-blocking)
-        const country = request.cf?.country || "XX";
-        const region  = request.cf?.regionCode || request.cf?.region || "??";
-        ctx.waitUntil(logVisitor(env, country, region));
+        // Log visitor geo (non-blocking — country, state, city)
+        ctx.waitUntil(logVisitor(env, request));
 
                 // In window with no cache — fetch fresh
         if (inWindow && !cached) {
