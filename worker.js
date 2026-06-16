@@ -126,6 +126,362 @@ const CORS = {
   "Content-Type": "application/json",
 };
 
+
+// ── REPORT HTML ───────────────────────────────────────────────────────────────
+const REPORT_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cote Cup — Visitor Report</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{--bg:#080c14;--panel:#0f1623;--panel2:#141d2e;--panel3:#1a2540;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--gold:#e8b84b;--green:#3ecf74;--blue:#4a9eff;--text:#eef2f7;--muted:#7a8ba8;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;min-height:100vh}
+.header{background:var(--panel);border-bottom:1px solid var(--border2);padding:.9rem 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.title{font-size:1.2rem;font-weight:800;letter-spacing:-.02em}.title span{color:var(--gold)}
+.sub{font-size:.62rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:2px}
+.hdr-r{display:flex;align-items:center;gap:.75rem}
+.meta{font-size:.7rem;color:var(--muted)}
+.btn{background:none;border:1px solid var(--border2);color:var(--muted);font-size:.72rem;padding:5px 14px;border-radius:6px;cursor:pointer;transition:all .15s}.btn:hover{color:var(--text);border-color:var(--gold)}
+.page{padding:1.25rem 1.5rem;max-width:1300px;margin:0 auto}
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:.75rem;margin-bottom:1.25rem}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:.85rem 1rem}
+.stat-lbl{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.stat-val{font-size:1.6rem;font-weight:900;color:var(--gold);line-height:1}
+.stat-sub{font-size:.68rem;color:var(--muted);margin-top:3px}
+.tabs{display:flex;gap:4px;background:var(--panel2);padding:3px;border-radius:8px;width:fit-content;margin-bottom:1rem}
+.tab{background:none;border:none;color:var(--muted);font-size:.75rem;padding:5px 16px;border-radius:6px;cursor:pointer;transition:all .15s}
+.tab.active{background:var(--panel3);color:var(--text);font-weight:600}
+.main-row{display:grid;grid-template-columns:1fr 270px;gap:1.25rem;margin-bottom:1.25rem;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.phdr{padding:.7rem 1rem;border-bottom:1px solid var(--border);font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;justify-content:space-between}
+.hint{font-size:.62rem;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400}
+#mapWrap{padding:.75rem}
+svg.map{width:100%;display:block}
+.spath{cursor:pointer;transition:opacity .12s}.spath:hover{opacity:.75}
+.spath.selected{stroke:var(--gold)!important;stroke-width:2.5px}
+.cpath{cursor:pointer;transition:opacity .12s}.cpath:hover{opacity:.8}
+.cpath.selected{stroke:var(--gold)!important;stroke-width:1.5px}
+.drill{display:flex;flex-direction:column}
+.drow{display:flex;align-items:center;padding:6px 1rem;border-bottom:1px solid var(--border);font-size:.82rem}
+.drow:last-child{border-bottom:none}
+.drank{font-size:.7rem;color:var(--muted);min-width:22px;text-align:right}
+.dname{flex:1;margin:0 .6rem}
+.dbar-w{flex:1;background:rgba(255,255,255,0.05);border-radius:3px;height:5px;overflow:hidden;margin-right:.5rem}
+.dbar{height:5px;border-radius:3px;background:var(--gold)}
+.dcnt{font-weight:700;color:var(--gold);min-width:28px;text-align:right}
+.empty{padding:2rem 1rem;text-align:center;color:var(--muted);font-size:.82rem}
+.bottom-row{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
+.chart-wrap{padding:1rem;height:220px;position:relative}
+.intl-grid{display:grid;grid-template-columns:1fr 1fr}
+.icell{padding:7px 1rem;border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.icell:nth-child(even){border-right:none}
+.iname{font-size:.82rem}.icnt{font-weight:700;color:var(--gold);font-size:.82rem}
+#tip{position:fixed;background:var(--panel3);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;font-size:.78rem;pointer-events:none;display:none;z-index:100;white-space:nowrap}
+#tip strong{color:var(--gold)}
+@media(max-width:800px){.stats-row{grid-template-columns:1fr 1fr}.main-row{grid-template-columns:1fr}.bottom-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="tip"></div>
+<div class="header">
+  <div><div class="title">The <span>Cote Cup</span> 2026</div><div class="sub">Visitor Report</div></div>
+  <div class="hdr-r"><span class="meta" id="meta">Loading...</span><button class="btn" onclick="load()">Refresh</button></div>
+</div>
+<div class="page">
+  <div class="stats-row" id="statsRow">
+    <div class="stat"><div class="stat-lbl">Total visits</div><div class="stat-val">—</div></div>
+    <div class="stat"><div class="stat-lbl">Countries</div><div class="stat-val">—</div></div>
+    <div class="stat"><div class="stat-lbl">US States</div><div class="stat-val">—</div></div>
+    <div class="stat"><div class="stat-lbl">Top state</div><div class="stat-val" style="font-size:1rem">—</div></div>
+    <div class="stat"><div class="stat-lbl">Top city</div><div class="stat-val" style="font-size:1rem">—</div></div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" id="tabWorld" onclick="switchTab('world')">🌍 World</button>
+    <button class="tab" id="tabUS" onclick="switchTab('us')">🇺🇸 United States</button>
+  </div>
+  <div class="main-row" id="mainRow">
+    <div class="panel"><div class="phdr"><span id="mapTitle">World</span><span class="hint" id="mapHint">Click a country</span></div><div id="mapWrap"><svg class="map" id="mapSvg"></svg></div></div>
+    <div class="panel drill" id="drillPanel">
+      <div class="phdr"><span id="drillTitle">Visitors</span></div>
+      <div class="empty" id="drillEmpty">Click a country or state on the map</div>
+      <div id="drillList"></div>
+    </div>
+  </div>
+  <div class="bottom-row">
+    <div class="panel"><div class="phdr">Daily visits — last 14 days</div><div class="chart-wrap"><canvas id="trendChart"></canvas></div></div>
+    <div class="panel"><div class="phdr">All Countries</div><div class="intl-grid" id="intlGrid"><div class="empty">No data yet</div></div></div>
+  </div>
+</div>
+
+<script>
+const WORKER = "https://cotecup-worker.yeti-f3c.workers.dev/visitors";
+let vData = null, trendInst = null, currentTab = "world";
+let worldTopo = null, usTopo = null;
+
+// ── LOOKUPS ───────────────────────────────────────────────────────────────────
+const STATE_NAMES={AL:"Alabama",AK:"Alaska",AZ:"Arizona",AR:"Arkansas",CA:"California",CO:"Colorado",CT:"Connecticut",DE:"Delaware",FL:"Florida",GA:"Georgia",HI:"Hawaii",ID:"Idaho",IL:"Illinois",IN:"Indiana",IA:"Iowa",KS:"Kansas",KY:"Kentucky",LA:"Louisiana",ME:"Maine",MD:"Maryland",MA:"Massachusetts",MI:"Michigan",MN:"Minnesota",MS:"Mississippi",MO:"Missouri",MT:"Montana",NE:"Nebraska",NV:"Nevada",NH:"New Hampshire",NJ:"New Jersey",NM:"New Mexico",NY:"New York",NC:"North Carolina",ND:"North Dakota",OH:"Ohio",OK:"Oklahoma",OR:"Oregon",PA:"Pennsylvania",RI:"Rhode Island",SC:"South Carolina",SD:"South Dakota",TN:"Tennessee",TX:"Texas",UT:"Utah",VT:"Vermont",VA:"Virginia",WA:"Washington",WV:"West Virginia",WI:"Wisconsin",WY:"Wyoming",DC:"Washington D.C."};
+const N2C={4:"AF",8:"AL",12:"DZ",20:"AD",24:"AO",28:"AG",32:"AR",36:"AU",40:"AT",44:"BS",48:"BH",50:"BD",52:"BB",56:"BE",64:"BT",68:"BO",72:"BW",76:"BR",84:"BZ",100:"BG",104:"MM",116:"KH",120:"CM",124:"CA",140:"CF",144:"LK",148:"TD",152:"CL",156:"CN",170:"CO",180:"CD",188:"CR",191:"HR",192:"CU",196:"CY",203:"CZ",208:"DK",218:"EC",231:"ET",246:"FI",250:"FR",266:"GA",276:"DE",288:"GH",300:"GR",320:"GT",324:"GN",328:"GY",332:"HT",340:"HN",348:"HU",356:"IN",360:"ID",364:"IR",368:"IQ",372:"IE",376:"IL",380:"IT",388:"JM",392:"JP",400:"JO",404:"KE",410:"KR",414:"KW",418:"LA",422:"LB",430:"LR",434:"LY",450:"MG",454:"MW",458:"MY",466:"ML",478:"MR",484:"MX",496:"MN",504:"MA",508:"MZ",516:"NA",524:"NP",528:"NL",554:"NZ",558:"NI",562:"NE",566:"NG",578:"NO",586:"PK",591:"PA",600:"PY",604:"PE",608:"PH",616:"PL",620:"PT",634:"QA",642:"RO",643:"RU",646:"RW",682:"SA",686:"SN",703:"SK",704:"VN",706:"SO",710:"ZA",716:"ZW",724:"ES",740:"SR",752:"SE",756:"CH",760:"SY",764:"TH",788:"TN",792:"TR",800:"UG",804:"UA",784:"AE",818:"EG",826:"GB",834:"TZ",840:"US",858:"UY",860:"UZ",862:"VE",887:"YE",894:"ZM",275:"PS",222:"SV",108:"BI"};
+const CNAMES={US:"United States",MX:"Mexico",CA:"Canada",GB:"United Kingdom",AR:"Argentina",BR:"Brazil",ES:"Spain",FR:"France",DE:"Germany",AU:"Australia",JP:"Japan",IT:"Italy",PT:"Portugal",NL:"Netherlands",CO:"Colombia",VE:"Venezuela",CL:"Chile",PE:"Peru",UY:"Uruguay",EC:"Ecuador",PA:"Panama",GT:"Guatemala",CR:"Costa Rica",DO:"Dominican Republic",PR:"Puerto Rico",CU:"Cuba",IE:"Ireland",SE:"Sweden",NO:"Norway",DK:"Denmark",FI:"Finland",NZ:"New Zealand",ZA:"South Africa",IN:"India",CN:"China",KR:"South Korea",PH:"Philippines",NG:"Nigeria",KE:"Kenya",EG:"Egypt",MA:"Morocco",TN:"Tunisia",GH:"Ghana",XX:"Unknown"};
+const cname=c=>CNAMES[c]||c;
+const NAME2CODE={};Object.entries(STATE_NAMES).forEach(([k,v])=>{NAME2CODE[v]=k;});
+
+// ── LOAD ─────────────────────────────────────────────────────────────────────
+async function load(){
+  document.getElementById("meta").textContent="Refreshing...";
+  try{
+    const r=await fetch(WORKER);
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    vData=await r.json();
+    render(vData);
+    document.getElementById("meta").textContent="Updated "+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+  }catch(e){document.getElementById("meta").textContent="Error: "+e.message;}
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+function switchTab(t){
+  currentTab=t;
+  document.getElementById("tabWorld").classList.toggle("active",t==="world");
+  document.getElementById("tabUS").classList.toggle("active",t==="us");
+  clearDrill();
+  if(t==="world") renderWorldMap(getGeoData());
+  else renderUSMap(getGeoData());
+}
+
+function clearDrill(){
+  document.getElementById("drillTitle").textContent="Visitors";
+  document.getElementById("drillEmpty").style.display="block";
+  document.getElementById("drillList").innerHTML="";
+}
+
+function getGeoData(){return vData?.geo||{};}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function render(data){
+  const geo=data.geo||{}, daily=data.daily||{};
+  const usGeo=geo["US"]||{};
+
+  let total=0;
+  Object.values(daily).forEach(v=>total+=v);
+
+  // State totals
+  const stateData={};
+  let topState=null,topSC=0,topCity=null,topCC=0;
+  Object.entries(usGeo).forEach(([k,v])=>{
+    if(k==="_t") return;
+    let fn=STATE_NAMES[k]||k;
+    stateData[fn]=v._t||0;
+    if((v._t||0)>topSC){topSC=v._t;topState=fn;}
+    Object.entries(v).forEach(([city,cnt])=>{
+      if(city==="_t") return;
+      if(cnt>topCC){topCC=cnt;topCity=city;}
+    });
+  });
+
+  const usTotal=usGeo._t||0;
+  const countries=Object.keys(geo).length;
+  const stateCount=Object.keys(stateData).length;
+
+  document.getElementById("statsRow").innerHTML=\`
+    <div class="stat"><div class="stat-lbl">Total visits</div><div class="stat-val">\${total.toLocaleString()}</div></div>
+    <div class="stat"><div class="stat-lbl">Countries</div><div class="stat-val">\${countries}</div></div>
+    <div class="stat"><div class="stat-lbl">US States</div><div class="stat-val">\${stateCount}</div><div class="stat-sub">\${total?Math.round(usTotal/total*100):0}% from US</div></div>
+    <div class="stat"><div class="stat-lbl">Top state</div><div class="stat-val" style="font-size:1rem">\${topState||"—"}</div>\${topState?\`<div class="stat-sub">\${topSC} visits</div>\`:""}</div>
+    <div class="stat"><div class="stat-lbl">Top city</div><div class="stat-val" style="font-size:1rem">\${topCity||"—"}</div>\${topCity?\`<div class="stat-sub">\${topCC} visits</div>\`:""}</div>\`;
+
+  renderTrend(daily);
+  renderIntl(geo);
+  if(currentTab==="world") renderWorldMap(geo);
+  else renderUSMap(geo);
+}
+
+// ── WORLD MAP ────────────────────────────────────────────────────────────────
+async function renderWorldMap(geo){
+  document.getElementById("mapTitle").textContent="World";
+  document.getElementById("mapHint").textContent="Click a country";
+  const svg=d3.select("#mapSvg").attr("viewBox","0 0 960 500");
+  svg.selectAll("*").remove();
+
+  // Country totals keyed by alpha-2
+  const countryTotals={};
+  Object.entries(geo).forEach(([c,v])=>{ countryTotals[c]=v._t||0; });
+  const maxVal=Math.max(...Object.values(countryTotals),1);
+  const color=d3.scaleSequential([0,maxVal],["#1a2540","#e8b84b"]);
+
+  if(!worldTopo){
+    worldTopo=await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
+  }
+
+  const proj=d3.geoNaturalEarth1().scale(153).translate([480,250]);
+  const path=d3.geoPath(proj);
+  const features=topojson.feature(worldTopo,worldTopo.objects.countries).features;
+  const tip=document.getElementById("tip");
+
+  // Graticule
+  svg.append("path").datum(d3.geoGraticule()()).attr("d",path)
+    .attr("fill","none").attr("stroke","rgba(255,255,255,0.04)").attr("stroke-width",".5");
+  // Sphere outline
+  svg.append("path").datum({type:"Sphere"}).attr("d",path)
+    .attr("fill","none").attr("stroke","rgba(255,255,255,0.1)").attr("stroke-width","1");
+
+  svg.selectAll(".cpath")
+    .data(features)
+    .join("path")
+    .attr("class","cpath")
+    .attr("d",path)
+    .attr("fill",d=>{const code=N2C[+d.id];return color(code?countryTotals[code]||0:0);})
+    .attr("stroke","#0f1623").attr("stroke-width","0.4")
+    .on("mousemove",function(ev,d){
+      const code=N2C[+d.id];
+      const count=code?countryTotals[code]||0:0;
+      const name=code?cname(code):"Unknown";
+      tip.style.display="block";
+      tip.style.left=(ev.clientX+14)+"px";
+      tip.style.top=(ev.clientY-28)+"px";
+      tip.innerHTML=\`<strong>\${name}</strong> — \${count} visit\${count!==1?"s":""}\`;
+    })
+    .on("mouseleave",()=>{tip.style.display="none";})
+    .on("click",function(ev,d){
+      const code=N2C[+d.id];
+      if(!code) return;
+      svg.selectAll(".cpath").classed("selected",false);
+      d3.select(this).classed("selected",true);
+      if(code==="US"){
+        // Drill into US states
+        showDrill("United States — States", geo["US"]||{}, "state");
+      } else {
+        showDrill(cname(code), geo[code]||{}, "region");
+      }
+    });
+}
+
+// ── US MAP ───────────────────────────────────────────────────────────────────
+async function renderUSMap(geo){
+  document.getElementById("mapTitle").textContent="United States";
+  document.getElementById("mapHint").textContent="Click a state";
+  const svg=d3.select("#mapSvg").attr("viewBox","0 0 960 580");
+  svg.selectAll("*").remove();
+
+  const usGeo=geo["US"]||{};
+  const stateData={};
+  Object.entries(usGeo).forEach(([k,v])=>{
+    if(k==="_t") return;
+    const fn=STATE_NAMES[k]||k;
+    stateData[fn]=v._t||0;
+  });
+
+  const maxVal=Math.max(...Object.values(stateData),1);
+  const color=d3.scaleSequential([0,maxVal],["#1a2540","#e8b84b"]);
+
+  if(!usTopo){
+    usTopo=await d3.json("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json");
+  }
+
+  const proj=d3.geoAlbersUsa().scale(1100).translate([480,290]);
+  const path=d3.geoPath(proj);
+  const features=topojson.feature(usTopo,usTopo.objects.states).features;
+  const tip=document.getElementById("tip");
+
+  svg.selectAll(".spath")
+    .data(features)
+    .join("path")
+    .attr("class","spath")
+    .attr("d",path)
+    .attr("fill",d=>color(stateData[d.properties.name]||0))
+    .attr("stroke","#0f1623").attr("stroke-width","0.5")
+    .on("mousemove",function(ev,d){
+      const count=stateData[d.properties.name]||0;
+      tip.style.display="block";
+      tip.style.left=(ev.clientX+14)+"px";
+      tip.style.top=(ev.clientY-28)+"px";
+      tip.innerHTML=\`<strong>\${d.properties.name}</strong> — \${count} visit\${count!==1?"s":""}\`;
+    })
+    .on("mouseleave",()=>{tip.style.display="none";})
+    .on("click",function(ev,d){
+      svg.selectAll(".spath").classed("selected",false);
+      d3.select(this).classed("selected",true);
+      const name=d.properties.name;
+      const code=NAME2CODE[name];
+      const stObj=code?(usGeo[name]||usGeo[code]||{}): (usGeo[name]||{});
+      showDrill(name+" — Cities", stObj, "city");
+    });
+
+  // State abbreviation labels
+  svg.selectAll("text")
+    .data(features.filter(d=>(stateData[d.properties.name]||0)>0))
+    .join("text")
+    .attr("transform",d=>{const c=path.centroid(d);return c?\`translate(\${c})\`:null;})
+    .attr("text-anchor","middle").attr("dominant-baseline","middle")
+    .attr("font-size","8").attr("fill","rgba(255,255,255,0.7)").attr("pointer-events","none")
+    .text(d=>NAME2CODE[d.properties.name]||"");
+}
+
+// ── DRILL PANEL ───────────────────────────────────────────────────────────────
+function showDrill(title, obj, mode){
+  document.getElementById("drillTitle").textContent=title;
+
+  let entries;
+  if(mode==="city" || mode==="region"){
+    // Show cities or sub-regions — exclude _t
+    entries=Object.entries(obj).filter(([k])=>k!=="state"&&k!=="region"&&k!=="_t")
+      .sort((a,b)=>b[1]-a[1]);
+  } else {
+    // State mode: obj = usGeo, values have _t
+    entries=Object.entries(obj).filter(([k])=>k!=="state"&&k!=="_t")
+      .map(([k,v])=>[STATE_NAMES[k]||k, v._t||0])
+      .sort((a,b)=>b[1]-a[1]);
+  }
+
+  const maxV=entries[0]?.[1]||1;
+  document.getElementById("drillEmpty").style.display=entries.length?"none":"block";
+  document.getElementById("drillList").innerHTML=entries.map(([name,count],i)=>\`
+    <div class="drow">
+      <div class="drank">\${i+1}</div>
+      <div class="dname">\${name}</div>
+      <div class="dbar-w"><div class="dbar" style="width:\${Math.round(count/maxV*100)}%"></div></div>
+      <div class="dcnt">\${count}</div>
+    </div>\`).join("");
+}
+
+// ── TREND ─────────────────────────────────────────────────────────────────────
+function renderTrend(daily){
+  const today=new Date(), labels=[], values=[];
+  for(let i=13;i>=0;i--){
+    const d=new Date(+today-i*86400000).toISOString().slice(0,10);
+    labels.push(d.slice(5)); values.push(daily[d]||0);
+  }
+  if(trendInst) trendInst.destroy();
+  trendInst=new Chart(document.getElementById("trendChart"),{
+    type:"line",
+    data:{labels,datasets:[{label:"Visits",data:values,borderColor:"#e8b84b",backgroundColor:"rgba(232,184,75,0.12)",borderWidth:2,pointRadius:4,pointBackgroundColor:"#e8b84b",fill:true,tension:0.3}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:"#7a8ba8",font:{size:10}},grid:{color:"rgba(255,255,255,0.04)"}},
+        y:{ticks:{color:"#7a8ba8",font:{size:10},stepSize:1},grid:{color:"rgba(255,255,255,0.04)"},beginAtZero:true}
+      }}
+  });
+}
+
+// ── INTL ──────────────────────────────────────────────────────────────────────
+function renderIntl(geo){
+  const sorted=Object.entries(geo).sort((a,b)=>(b[1]._t||0)-(a[1]._t||0));
+  const el=document.getElementById("intlGrid");
+  if(!sorted.length){el.innerHTML='<div class="empty">No data yet</div>';return;}
+  el.innerHTML=sorted.map(([code,v])=>\`
+    <div class="icell"><span class="iname">\${cname(code)}</span><span class="icnt">\${v._t||0}</span></div>\`).join("");
+}
+
+load();
+</script>
+</body>
+</html>
+`;
+
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
 // Convert schedule entry to UTC timestamp in ms
@@ -260,7 +616,17 @@ export default {
       }
     }
 
-    if (url.pathname === "/visitors") {
+    if (url.pathname === "/report") {
+      const key = url.searchParams.get("key");
+      if (!env.REPORT_KEY || key !== env.REPORT_KEY) {
+        return new Response("Not found", { status: 404 });
+      }
+      return new Response(REPORT_HTML, {
+        headers: { "Content-Type": "text/html; charset=utf-8" }
+      });
+    }
+
+        if (url.pathname === "/visitors") {
       const stats = await env.COTECUP_CACHE.get("visitor_stats_v2", "json") || { daily: {}, geo: {} };
       return new Response(JSON.stringify(stats), { headers: CORS });
     }
