@@ -255,6 +255,15 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 // ── UPDATE THIS after deploying your Cloudflare Worker ──
 const WORKER_URL = "https://cotecup-worker.yeti-f3c.workers.dev/data";
 
+// Admin mode: visit the site with ?notrack in the URL once per device
+// to exclude your visits from the tracker permanently on that device.
+if (new URLSearchParams(window.location.search).has("notrack")) {
+  localStorage.setItem("cotecup_notrack", "1");
+}
+const _dataURL = localStorage.getItem("cotecup_notrack")
+  ? WORKER_URL + "?notrack=1"
+  : WORKER_URL;
+
 const DRAFT = {
   Yeti:  ["Côte d'Ivoire","Colombia","United States","Morocco","Belgium","Sweden","Senegal","Canada","Australia","Iran","Cabo Verde","Panama","Jordan","Uzbekistan","South Africa","Curaçao"],
   Chris: ["France","Argentina","Portugal","Netherlands","Norway","Japan","Mexico","Switzerland","Austria","Scotland","Czechia","Ghana","Tunisia","Bosnia and Herzegovina","Saudi Arabia","Iraq"],
@@ -950,7 +959,7 @@ function renderStandingsChart(completed){
 async function fetchData(){
   try{
     document.getElementById("lastUpdated").textContent="Refreshing...";
-    const res=await fetch(WORKER_URL);
+    const res=await fetch(_dataURL);
     if(!res.ok) throw new Error(`Worker error ${res.status}`);
     const data=await res.json();
     window._lastData = data;
