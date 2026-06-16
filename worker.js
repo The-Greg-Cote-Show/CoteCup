@@ -168,7 +168,7 @@ function msUntilNextWindow(nowMs) {
 async function fetchAllFixtures(env) {
   const url = `${API_BASE}/competitions/${COMPETITION}/matches`;
   const res = await fetch(url, {
-    headers: { "X-Auth-Token": env.FOOTBALL_DATA_KEY },
+    headers: { "X-Auth-Token": env.FOOTBALL_DATA_KEY, "X-Api-Version": "v4.1" },
   });
   const raw = await res.text();
   console.log("API status:", res.status, "body:", raw.slice(0, 500));
