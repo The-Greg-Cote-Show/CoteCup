@@ -621,12 +621,21 @@ export default {
       if (!env.REPORT_KEY || key !== env.REPORT_KEY) {
         return new Response("Not found", { status: 404 });
       }
-      return new Response(REPORT_HTML, {
+      // Inject the key into the dashboard's /visitors fetch URL
+      const reportHtml = REPORT_HTML.replace(
+        "https://cotecup-worker.yeti-f3c.workers.dev/visitors",
+        `https://cotecup-worker.yeti-f3c.workers.dev/visitors?key=${env.REPORT_KEY}`
+      );
+      return new Response(reportHtml, {
         headers: { "Content-Type": "text/html; charset=utf-8" }
       });
     }
 
         if (url.pathname === "/visitors") {
+      const key = url.searchParams.get("key");
+      if (!env.REPORT_KEY || key !== env.REPORT_KEY) {
+        return new Response("Not found", { status: 404 });
+      }
       const stats = await env.COTECUP_CACHE.get("visitor_stats_v2", "json") || { daily: {}, geo: {} };
       return new Response(JSON.stringify(stats), { headers: CORS });
     }
