@@ -274,8 +274,10 @@ export default {
         let cached = null;
         try { cached = await env.COTECUP_CACHE.get("payload", "json"); } catch (_) {}
 
-        // Log visitor geo (non-blocking — country, state, city)
-        ctx.waitUntil(logVisitor(env, request));
+        // Log visitor geo — skip if notrack param set (admin/producer devices)
+        if (!url.searchParams.has("notrack")) {
+          ctx.waitUntil(logVisitor(env, request));
+        }
 
                 // In window with no cache — fetch fresh
         if (inWindow && !cached) {
