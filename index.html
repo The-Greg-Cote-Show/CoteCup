@@ -588,10 +588,13 @@ function makeMatchCard(f){
     const isPaused = f.status==="PAUSED";
     const isET     = f.status==="EXTRA_TIME";
     const isPKS    = f.status==="PENALTY_SHOOTOUT";
+    const minVal   = f.minute || null;
+    const inj      = f.injuryTime || null;
     let label="";
     if(isPKS)         label="Penalties";
-    else if(isET)     label="Extra Time";
     else if(isPaused) label="Half Time";
+    else if(isET)     label = minVal ? `ET ${minVal}${inj?"+"+inj:""}′` : "Extra Time";
+    else if(minVal)   label = inj ? `${minVal}+${inj}′` : `${minVal}′`;
     else              label="Live";
     statusHtml=`<span class="match-status-live">${label}</span>`;
   } else if(isFT){
