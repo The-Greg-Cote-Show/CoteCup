@@ -446,7 +446,7 @@ function resetView(){
 // ── US MAP ───────────────────────────────────────────────────────────────────
 async function renderUSMap(geo){
   document.getElementById("mapTitle").textContent="United States";
-  document.getElementById("mapHint").textContent="Click a state";
+  document.getElementById("mapHint").textContent="Click a state for cities";
   document.getElementById("mapHint").style.display="";
   document.getElementById("mapBack").style.display="none";
 
@@ -491,9 +491,20 @@ async function renderUSMap(geo){
       const name=d.properties.name;
       const code=NAME2CODE[name];
       const stObj=code?(usGeo[name]||usGeo[code]||{}):(usGeo[name]||{});
-      drillStack=[{title:\`\${name} — Cities\`, obj:stObj, mode:"city"}];
+      // Keep states as level 1 so back button works
+      drillStack=[
+        {title:"United States — States", obj:usGeo, mode:"region"},
+        {title:\`\${name} — Cities\`, obj:stObj, mode:"city"}
+      ];
       renderDrill();
     });
+
+  // Auto-populate right panel with state list on load
+  const hasStates = Object.keys(usGeo).filter(k=>k!=="_t").length > 0;
+  if(hasStates && (drillStack.length===0 || drillStack[0].title!=="United States — States")){
+    drillStack=[{title:"United States — States", obj:usGeo, mode:"region"}];
+    renderDrill();
+  }
 
   svg.selectAll("text")
     .data(features.filter(d=>(stateData[d.properties.name]||0)>0))
