@@ -127,6 +127,7 @@ const CORS = {
 };
 
 
+
 // ── REPORT HTML ───────────────────────────────────────────────────────────────
 const REPORT_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -543,7 +544,7 @@ function renderDrill(){
 
   const maxV=entries[0]?.count||1;
   document.getElementById("drillList").innerHTML=entries.map((e,i)=>\`
-    <div class="drow \${e.sub?"clickable":""}" \${e.sub?\`onclick="drillInto('\${e.name.replace(/'/g,"\\'")}')"\`:""}">
+    <div class="drow \${e.sub?"clickable":""}" \${e.sub?\`onclick="drillInto('\${e.name.replace(/'/g,"\\\\'")}')"\`:""}">
       <div class="drank">\${i+1}</div>
       <div class="dname">\${e.name}\${e.sub?\` <span class="dsub">›</span>\`:""}</div>
       <div class="dbar-w"><div class="dbar" style="width:\${Math.round(e.count/maxV*100)}%"></div></div>
@@ -612,195 +613,6 @@ function clickCountry(code){
     return;
   }
   selectCountry(code);
-}
-
-load();
-</script>
-</body>
-</html>
-`;
-
-  renderTrend(daily);
-  renderIntl(geo);
-  if(currentTab==="world") renderWorldMap(geo);
-  else renderUSMap(geo);
-}
-
-// ── WORLD MAP ────────────────────────────────────────────────────────────────
-async function renderWorldMap(geo){
-  document.getElementById("mapTitle").textContent="World";
-  document.getElementById("mapHint").textContent="Click a country";
-  const svg=d3.select("#mapSvg").attr("viewBox","0 0 960 500");
-  svg.selectAll("*").remove();
-
-  // Country totals keyed by alpha-2
-  const countryTotals={};
-  Object.entries(geo).forEach(([c,v])=>{ countryTotals[c]=v._t||0; });
-  const maxVal=Math.max(...Object.values(countryTotals),1);
-  const color=d3.scaleSequential([0,maxVal],["#1a2540","#e8b84b"]);
-
-  if(!worldTopo){
-    worldTopo=await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
-  }
-
-  const proj=d3.geoNaturalEarth1().scale(153).translate([480,250]);
-  const path=d3.geoPath(proj);
-  const features=topojson.feature(worldTopo,worldTopo.objects.countries).features;
-  const tip=document.getElementById("tip");
-
-  // Graticule
-  svg.append("path").datum(d3.geoGraticule()()).attr("d",path)
-    .attr("fill","none").attr("stroke","rgba(255,255,255,0.04)").attr("stroke-width",".5");
-  // Sphere outline
-  svg.append("path").datum({type:"Sphere"}).attr("d",path)
-    .attr("fill","none").attr("stroke","rgba(255,255,255,0.1)").attr("stroke-width","1");
-
-  svg.selectAll(".cpath")
-    .data(features)
-    .join("path")
-    .attr("class","cpath")
-    .attr("d",path)
-    .attr("fill",d=>{const code=N2C[+d.id];return color(code?countryTotals[code]||0:0);})
-    .attr("stroke","#0f1623").attr("stroke-width","0.4")
-    .on("mousemove",function(ev,d){
-      const code=N2C[+d.id];
-      const count=code?countryTotals[code]||0:0;
-      const name=code?cname(code):"Unknown";
-      tip.style.display="block";
-      tip.style.left=(ev.clientX+14)+"px";
-      tip.style.top=(ev.clientY-28)+"px";
-      tip.innerHTML=\`<strong>\${name}</strong> — \${count} visit\${count!==1?"s":""}\`;
-    })
-    .on("mouseleave",()=>{tip.style.display="none";})
-    .on("click",function(ev,d){
-      const code=N2C[+d.id];
-      if(!code) return;
-      svg.selectAll(".cpath").classed("selected",false);
-      d3.select(this).classed("selected",true);
-      if(code==="US"){
-        // Drill into US states
-        showDrill("United States — States", geo["US"]||{}, "state");
-      } else {
-        showDrill(cname(code), geo[code]||{}, "region");
-      }
-    });
-}
-
-// ── US MAP ───────────────────────────────────────────────────────────────────
-async function renderUSMap(geo){
-  document.getElementById("mapTitle").textContent="United States";
-  document.getElementById("mapHint").textContent="Click a state";
-  const svg=d3.select("#mapSvg").attr("viewBox","0 0 960 580");
-  svg.selectAll("*").remove();
-
-  const usGeo=geo["US"]||{};
-  const stateData={};
-  Object.entries(usGeo).forEach(([k,v])=>{
-    if(k==="_t") return;
-    const fn=STATE_NAMES[k]||k;
-    stateData[fn]=v._t||0;
-  });
-
-  const maxVal=Math.max(...Object.values(stateData),1);
-  const color=d3.scaleSequential([0,maxVal],["#1a2540","#e8b84b"]);
-
-  if(!usTopo){
-    usTopo=await d3.json("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json");
-  }
-
-  const proj=d3.geoAlbersUsa().scale(1100).translate([480,290]);
-  const path=d3.geoPath(proj);
-  const features=topojson.feature(usTopo,usTopo.objects.states).features;
-  const tip=document.getElementById("tip");
-
-  svg.selectAll(".spath")
-    .data(features)
-    .join("path")
-    .attr("class","spath")
-    .attr("d",path)
-    .attr("fill",d=>color(stateData[d.properties.name]||0))
-    .attr("stroke","#0f1623").attr("stroke-width","0.5")
-    .on("mousemove",function(ev,d){
-      const count=stateData[d.properties.name]||0;
-      tip.style.display="block";
-      tip.style.left=(ev.clientX+14)+"px";
-      tip.style.top=(ev.clientY-28)+"px";
-      tip.innerHTML=\`<strong>\${d.properties.name}</strong> — \${count} visit\${count!==1?"s":""}\`;
-    })
-    .on("mouseleave",()=>{tip.style.display="none";})
-    .on("click",function(ev,d){
-      svg.selectAll(".spath").classed("selected",false);
-      d3.select(this).classed("selected",true);
-      const name=d.properties.name;
-      const code=NAME2CODE[name];
-      const stObj=code?(usGeo[name]||usGeo[code]||{}): (usGeo[name]||{});
-      showDrill(name+" — Cities", stObj, "city");
-    });
-
-  // State abbreviation labels
-  svg.selectAll("text")
-    .data(features.filter(d=>(stateData[d.properties.name]||0)>0))
-    .join("text")
-    .attr("transform",d=>{const c=path.centroid(d);return c?\`translate(\${c})\`:null;})
-    .attr("text-anchor","middle").attr("dominant-baseline","middle")
-    .attr("font-size","8").attr("fill","rgba(255,255,255,0.7)").attr("pointer-events","none")
-    .text(d=>NAME2CODE[d.properties.name]||"");
-}
-
-// ── DRILL PANEL ───────────────────────────────────────────────────────────────
-function showDrill(title, obj, mode){
-  document.getElementById("drillTitle").textContent=title;
-
-  let entries;
-  if(mode==="city" || mode==="region"){
-    // Show cities or sub-regions — exclude _t
-    entries=Object.entries(obj).filter(([k])=>k!=="state"&&k!=="region"&&k!=="_t")
-      .sort((a,b)=>b[1]-a[1]);
-  } else {
-    // State mode: obj = usGeo, values have _t
-    entries=Object.entries(obj).filter(([k])=>k!=="state"&&k!=="_t")
-      .map(([k,v])=>[STATE_NAMES[k]||k, v._t||0])
-      .sort((a,b)=>b[1]-a[1]);
-  }
-
-  const maxV=entries[0]?.[1]||1;
-  document.getElementById("drillEmpty").style.display=entries.length?"none":"block";
-  document.getElementById("drillList").innerHTML=entries.map(([name,count],i)=>\`
-    <div class="drow">
-      <div class="drank">\${i+1}</div>
-      <div class="dname">\${name}</div>
-      <div class="dbar-w"><div class="dbar" style="width:\${Math.round(count/maxV*100)}%"></div></div>
-      <div class="dcnt">\${count}</div>
-    </div>\`).join("");
-}
-
-// ── TREND ─────────────────────────────────────────────────────────────────────
-function renderTrend(daily){
-  const today=new Date(), labels=[], values=[];
-  for(let i=13;i>=0;i--){
-    const d=new Date(+today-i*86400000).toISOString().slice(0,10);
-    labels.push(d.slice(5)); values.push(daily[d]||0);
-  }
-  if(trendInst) trendInst.destroy();
-  trendInst=new Chart(document.getElementById("trendChart"),{
-    type:"line",
-    data:{labels,datasets:[{label:"Visits",data:values,borderColor:"#e8b84b",backgroundColor:"rgba(232,184,75,0.12)",borderWidth:2,pointRadius:4,pointBackgroundColor:"#e8b84b",fill:true,tension:0.3}]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{
-        x:{ticks:{color:"#7a8ba8",font:{size:10}},grid:{color:"rgba(255,255,255,0.04)"}},
-        y:{ticks:{color:"#7a8ba8",font:{size:10},stepSize:1},grid:{color:"rgba(255,255,255,0.04)"},beginAtZero:true}
-      }}
-  });
-}
-
-// ── INTL ──────────────────────────────────────────────────────────────────────
-function renderIntl(geo){
-  const sorted=Object.entries(geo).sort((a,b)=>(b[1]._t||0)-(a[1]._t||0));
-  const el=document.getElementById("intlGrid");
-  if(!sorted.length){el.innerHTML='<div class="empty">No data yet</div>';return;}
-  el.innerHTML=sorted.map(([code,v])=>\`
-    <div class="icell"><span class="iname">\${cname(code)}</span><span class="icnt">\${v._t||0}</span></div>\`).join("");
 }
 
 load();
