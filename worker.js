@@ -128,6 +128,7 @@ const CORS = {
 
 
 
+
 // ── REPORT HTML ───────────────────────────────────────────────────────────────
 const REPORT_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -558,14 +559,33 @@ function renderDrill(){
   }
 
   const maxV=entries[0]?.count||1;
-  document.getElementById("drillList").className=entries.length>18?"two-col":"";
-  document.getElementById("drillList").innerHTML=entries.map((e,i)=>\`
-    <div class="drow \${e.sub?"clickable":""}" \${e.sub?\`onclick="drillInto('\${e.name.replace(/'/g,"\\\\'")}')"\`:""}">
+  const mainRow=document.getElementById('mainRow');
+  if(entries.length>18){
+    mainRow.classList.add('expanded');
+    document.getElementById('drillList').className='';
+    const half=Math.ceil(entries.length/2);
+    const col1=entries.slice(0,half);
+    const col2=entries.slice(half);
+    const cRow=(e,idx)=>'<div class="drow '+(e.sub?'clickable':'')+'" '+(e.sub?'onclick="drillInto(\\''+e.name.replace(/\\'/g,'\\\\\\'')+'\\')"':'')+'>'
+      +'<div class="drank">'+idx+'</div>'
+      +'<div class="dname" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+e.name+(e.sub?' <span class="dsub">›</span>':'')+'</div>'
+      +'<div class="dcnt">'+e.count+'</div></div>';
+    document.getElementById('drillList').innerHTML=
+      '<div class="drill-cols">'
+      +'<div class="drill-col">'+col1.map((e,i)=>cRow(e,i+1)).join('')+'</div>'
+      +'<div class="drill-col">'+col2.map((e,i)=>cRow(e,i+half+1)).join('')+'</div>'
+      +'</div>';
+  } else {
+    mainRow.classList.remove('expanded');
+    document.getElementById('drillList').className='';
+    document.getElementById('drillList').innerHTML=entries.map((e,i)=>\`
+    <div class="drow \${e.sub?'clickable':''}" \${e.sub?\`onclick="drillInto('\${e.name.replace(/'/g,"\\\\'")}')"\`:''}>
       <div class="drank">\${i+1}</div>
-      <div class="dname">\${e.name}\${e.sub?\` <span class="dsub">›</span>\`:""}</div>
+      <div class="dname">\${e.name}\${e.sub?\` <span class="dsub">›</span>\`:''}</div>
       <div class="dbar-w"><div class="dbar" style="width:\${Math.round(e.count/maxV*100)}%"></div></div>
       <div class="dcnt">\${e.count}</div>
-    </div>\`).join("");
+    </div>\`).join('');
+  }
 }
 
 function drillInto(regionName){
