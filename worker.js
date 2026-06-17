@@ -178,6 +178,9 @@ svg.map{width:100%;display:block}
 .dbar{height:5px;border-radius:3px;background:var(--gold)}
 .dcnt{font-weight:700;color:var(--gold);min-width:28px;text-align:right}
 .dsub{font-size:.65rem;color:var(--muted);margin-left:4px}
+#drillList.two-col{display:grid;grid-template-columns:1fr 1fr;align-items:start}
+#drillList.two-col .drow{border-bottom:1px solid var(--border)}
+@media(max-width:800px){#drillList.two-col{display:flex;flex-direction:column}}
 .empty{padding:2rem 1rem;text-align:center;color:var(--muted);font-size:.82rem}
 .bottom-row{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
 .chart-wrap{padding:1rem;height:220px;position:relative}
@@ -554,6 +557,7 @@ function renderDrill(){
   }
 
   const maxV=entries[0]?.count||1;
+  document.getElementById("drillList").className=entries.length>18?"two-col":"";
   document.getElementById("drillList").innerHTML=entries.map((e,i)=>\`
     <div class="drow \${e.sub?"clickable":""}" \${e.sub?\`onclick="drillInto('\${e.name.replace(/'/g,"\\\\'")}')"\`:""}">
       <div class="drank">\${i+1}</div>
