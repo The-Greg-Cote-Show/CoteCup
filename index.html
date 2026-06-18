@@ -912,7 +912,7 @@ function renderStandingsChart(completed){
 
   const sorted = [...completed].sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
   const pts = {Yeti:0, Chris:0, Greg:0};
-  const history = [{label:'Start', Yeti:0, Chris:0, Greg:0}];
+  const history = [{label:'Start', Yeti:0, Chris:0, Greg:0}, {label:'', Yeti:0, Chris:0, Greg:0, gap:true}];
 
   sorted.forEach(f=>{
     const h=norm(f.homeTeam?.name||''), a=norm(f.awayTeam?.name||'');
@@ -939,7 +939,7 @@ function renderStandingsChart(completed){
     const avatarSize = 32;
     const avatarSrc = AVATARS[drafter];
     return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
-      ${history.map((p,i)=> i===history.length-1 ? '' : `<circle cx="${PAD.l+i*xStep}" cy="${PAD.t+plotH-(p[drafter]/maxPts)*plotH}" r="3" fill="${color}"/>`).join('')}
+      ${history.map((p,i)=> (i===history.length-1 || p.gap) ? '' : `<circle cx="${PAD.l+i*xStep}" cy="${PAD.t+plotH-(p[drafter]/maxPts)*plotH}" r="3" fill="${color}"/>`).join('')}
       <circle cx="${lastX}" cy="${lastY}" r="${avatarSize/2+2}" fill="${color}" opacity="0.3"/>
       <clipPath id="clip-${drafter}"><circle cx="${lastX}" cy="${lastY}" r="${avatarSize/2}"/></clipPath>
       <image href="${avatarSrc}" x="${lastX-avatarSize/2}" y="${lastY-avatarSize/2}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#clip-${drafter})"/>`;
@@ -949,12 +949,16 @@ function renderStandingsChart(completed){
     if(i>0 && p.label===history[i-1].label) return '';
     return `<text x="${PAD.l+i*xStep}" y="${H-8}" text-anchor="middle" font-size="9" fill="#7a8ba8">${p.label}</text>`;
   }).join('');
+  const vLines=history.map((p,i)=>{
+    if(i===0 || p.gap || p.label==='' || (i>0 && p.label===history[i-1].label)) return '';
+    return `<line x1="${PAD.l+i*xStep}" y1="${PAD.t}" x2="${PAD.l+i*xStep}" y2="${PAD.t+plotH}" stroke="#ffffff08" stroke-width="1"/>`;
+  }).join('');
   const yLabels=[0,.25,.5,.75,1].map(v=>`<text x="${PAD.l-5}" y="${PAD.t+plotH-(v*plotH)+4}" text-anchor="end" font-size="9" fill="#7a8ba8">${Math.round(v*maxPts)}</text><line x1="${PAD.l}" y1="${PAD.t+plotH-v*plotH}" x2="${PAD.l+plotW}" y2="${PAD.t+plotH-v*plotH}" stroke="#ffffff10"/>`).join('');
 
   el.style.display='block';
   el.innerHTML=`<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">
     <defs></defs>
-    ${yLabels}${xLabels}
+    ${yLabels}${vLines}${xLabels}
     ${line('Greg','#fb923c')}${line('Chris','#38bdf8')}${line('Yeti','#a78bfa')}
   </svg>`;
 }
