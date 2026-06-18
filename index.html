@@ -945,7 +945,10 @@ function renderStandingsChart(completed){
       <image href="${avatarSrc}" x="${lastX-avatarSize/2}" y="${lastY-avatarSize/2}" width="${avatarSize}" height="${avatarSize}" clip-path="url(#clip-${drafter})"/>`;
   };
 
-  const xLabels=history.map((p,i)=>`<text x="${PAD.l+i*xStep}" y="${H-8}" text-anchor="middle" font-size="9" fill="#7a8ba8">${p.label}</text>`).join('');
+  const xLabels=history.map((p,i)=>{
+    if(i>0 && p.label===history[i-1].label) return '';
+    return `<text x="${PAD.l+i*xStep}" y="${H-8}" text-anchor="middle" font-size="9" fill="#7a8ba8">${p.label}</text>`;
+  }).join('');
   const yLabels=[0,.25,.5,.75,1].map(v=>`<text x="${PAD.l-5}" y="${PAD.t+plotH-(v*plotH)+4}" text-anchor="end" font-size="9" fill="#7a8ba8">${Math.round(v*maxPts)}</text><line x1="${PAD.l}" y1="${PAD.t+plotH-v*plotH}" x2="${PAD.l+plotW}" y2="${PAD.t+plotH-v*plotH}" stroke="#ffffff10"/>`).join('');
 
   el.style.display='block';
