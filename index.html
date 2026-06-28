@@ -849,14 +849,181 @@ function calcGroupStandings(groupTeams, completed){
   return Object.entries(stats).sort((a,b)=>b[1].pts-a[1].pts||b[1].gd-a[1].gd||b[1].gf-a[1].gf);
 }
 
+// ── KNOCKOUT BRACKET STRUCTURE ──────────────────────────────────────────────
+// Fixed FIFA bracket positions for the 32-team knockout stage. Slot labels are
+// descriptive only (never shown) -- actual team names are looked up live from
+// API fixtures by matching on which two teams played which match number.
+// Round of 32: 16 matches (73-88). Round of 16: 8 matches (89-96).
+// Quarterfinals: 4 matches (97-100). Semifinals: 2 (101-102). 3rd place (103). Final (104).
+const BRACKET_R32 = [
+  {m:73, label:"Match 73"}, {m:74, label:"Match 74"}, {m:75, label:"Match 75"}, {m:76, label:"Match 76"},
+  {m:77, label:"Match 77"}, {m:78, label:"Match 78"}, {m:79, label:"Match 79"}, {m:80, label:"Match 80"},
+  {m:81, label:"Match 81"}, {m:82, label:"Match 82"}, {m:83, label:"Match 83"}, {m:84, label:"Match 84"},
+  {m:85, label:"Match 85"}, {m:86, label:"Match 86"}, {m:87, label:"Match 87"}, {m:88, label:"Match 88"},
+];
+// Each R16 match's two feeder R32 match numbers, in bracket order
+const BRACKET_R16_FEEDS = [[73,75],[74,77],[76,78],[79,80],[83,84],[81,82],[86,88],[87,85]];
+const BRACKET_QF_FEEDS  = [[0,2],[1,3],[5,7],[4,6]]; // indices into R16 winners, reordered to match bracket flow
+const BRACKET_SF_FEEDS  = [[0,1],[2,3]]; // indices into QF winners
+
+function getStageFixtures(allFixtures, stageNames){
+  return allFixtures.filter(f => stageNames.includes((f.stage||'').toUpperCase()));
+}
+
+// Given a list of knockout fixtures for a stage, find the one at a given bracket
+// position by matching against the previous round's two winners (or null if R32).
+function matchCardData(f){
+  if(!f) return null;
+  const h = norm(f.homeTeam?.name||''), a = norm(f.awayTeam?.name||'');
+  const hg = f.score?.fullTime?.home, ag = f.score?.fullTime?.away;
+  const isDone = f.status === 'FINISHED';
+  const winner = isDone ? (hg>ag?h:ag>hg?a:null) : null;
+  return {
+    home:h, away:a, homeCrest:f.homeTeam?.crest, awayCrest:f.awayTeam?.crest,
+    hg, ag, isDone, isLive: ['IN_PLAY','PAUSED','LIVE'].includes(f.status),
+    winner, utcDate:f.utcDate, penalties: f.score?.duration==='PENALTY_SHOOTOUT'
+  };
+}
+
+function bracketMatchHtml(data, slotLabel){
+  if(!data){
+    return `<div class="bk-match bk-empty"><div class="bk-slot-label">${slotLabel}</div></div>`;
+  }
+  const hd=getDrafter(data.home), ad=getDrafter(data.away);
+  const homeWin = data.winner===data.home, awayWin=data.winner===data.away;
+  const scoreTxt = data.isDone ? `${data.hg}–${data.ag}${data.penalties?' (pens)':''}` :
+                   data.isLive ? `${data.hg??0}–${data.ag??0}` : 'vs';
+  return `<div class="bk-match">
+    <div class="bk-team ${homeWin?'bk-winner':''}">
+      ${teamImg(data.home,data.homeCrest,"16px")}
+      <span class="bk-team-name">${data.home}</span>
+      ${hd?`<span class="bk-drafter" style="color:var(--${DC[hd]}-col)">${hd[0]}</span>`:''}
+    </div>
+    <div class="bk-score ${data.isLive?'bk-live':''}">${scoreTxt}</div>
+    <div class="bk-team ${awayWin?'bk-winner':''}">
+      ${teamImg(data.away,data.awayCrest,"16px")}
+      <span class="bk-team-name">${data.away}</span>
+      ${ad?`<span class="bk-drafter" style="color:var(--${DC[ad]}-col)">${ad[0]}</span>`:''}
+    </div>
+  </div>`;
+}
+
 function renderBracket(data){
   const el = document.getElementById('bracketContent');
   if(!el) return;
   const completed = data?.fixtures?.completed||[];
+  const allF = data?.fixtures?.all || completed;
 
-  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;">';
+  // Pull all non-group fixtures, keyed by team-pair so we can find each match
+  // regardless of what FIFA match number the provider assigns internally.
+  const koAll = allF.filter(f => !((f.stage||'').toLowerCase().includes('group')));
 
-  // Group standings
+  // Bucket knockout fixtures by stage name (provider-specific strings, checked broadly)
+  const byStage = { r32:[], r16:[], qf:[], sf:[], third:[], final:[] };
+  koAll.forEach(f=>{
+    const s = (f.stage||'').toUpperCase();
+    if(s.includes('32')) byStage.r32.push(f);
+    else if(s.includes('16')) byStage.r16.push(f);
+    else if(s.includes('QUARTER')) byStage.qf.push(f);
+    else if(s.includes('THIRD') || s.includes('3RD')) byStage.third.push(f);
+    else if(s.includes('FINAL') && !s.includes('SEMI')) byStage.final.push(f);
+    else if(s.includes('SEMI')) byStage.sf.push(f);
+  });
+
+  // R32: sort by utcDate so position is at least stable/chronological since we
+  // can't get FIFA's official match-73-88 numbering from the API directly.
+  const r32Sorted = [...byStage.r32].sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
+  const r32Data = r32Sorted.map(matchCardData);
+
+  // Helper: find a later-round match by checking if both its teams are winners
+  // of two specific earlier matches (by index into the earlier round's data array)
+  function findNextRoundMatch(stageFixtures, feederData, feedIdxA, feedIdxB){
+    const teamA = feederData[feedIdxA]?.winner;
+    const teamB = feederData[feedIdxB]?.winner;
+    if(!teamA && !teamB) return null;
+    const found = stageFixtures.find(f=>{
+      const h=norm(f.homeTeam?.name||''), a=norm(f.awayTeam?.name||'');
+      return (h===teamA && a===teamB) || (h===teamB && a===teamA);
+    });
+    return found ? matchCardData(found) : null;
+  }
+
+  const r16Data = BRACKET_R16_FEEDS.map(([a,b], i) => {
+    const idxA = r32Sorted.findIndex((_,idx)=>idx===a-73);
+    const idxB = r32Sorted.findIndex((_,idx)=>idx===b-73);
+    return findNextRoundMatch(byStage.r16, r32Data, a-73, b-73);
+  });
+
+  const qfData = BRACKET_QF_FEEDS.map(([a,b]) => findNextRoundMatch(byStage.qf, r16Data, a, b));
+  const sfData = BRACKET_SF_FEEDS.map(([a,b]) => findNextRoundMatch(byStage.sf, qfData, a, b));
+  const finalData = sfData[0] && sfData[1]
+    ? (function(){
+        const teamA = sfData[0]?.winner, teamB = sfData[1]?.winner;
+        const found = byStage.final.find(f=>{
+          const h=norm(f.homeTeam?.name||''), a=norm(f.awayTeam?.name||'');
+          return (h===teamA&&a===teamB)||(h===teamB&&a===teamA);
+        });
+        return found ? matchCardData(found) : null;
+      })()
+    : null;
+  const thirdData = byStage.third.length ? matchCardData(byStage.third[0]) : null;
+
+  let html = `<style>
+    .bk-wrap{display:flex;gap:1rem;overflow-x:auto;padding-bottom:1rem;}
+    .bk-round{display:flex;flex-direction:column;justify-content:space-around;gap:.6rem;min-width:200px;}
+    .bk-round-label{font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:.25rem;}
+    .bk-match{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:.5rem .6rem;display:flex;flex-direction:column;gap:4px;font-size:.74rem;flex:1;justify-content:center;}
+    .bk-empty{background:var(--panel2);opacity:.5;min-height:54px;align-items:center;justify-content:center;}
+    .bk-slot-label{font-size:.62rem;color:var(--muted);text-align:center;}
+    .bk-team{display:flex;align-items:center;gap:5px;padding:1px 0;}
+    .bk-team-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .bk-winner .bk-team-name{font-weight:700;color:var(--text);}
+    .bk-team:not(.bk-winner) .bk-team-name{color:var(--muted);}
+    .bk-drafter{font-size:.6rem;font-weight:700;}
+    .bk-score{font-size:.65rem;color:var(--muted);text-align:center;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:1px 0;margin:1px 0;}
+    .bk-score.bk-live{color:var(--red);font-weight:700;}
+    .bk-final-wrap{display:flex;flex-direction:column;align-items:center;gap:.5rem;min-width:200px;justify-content:center;}
+  </style>`;
+
+  html += `<div style="margin-bottom:1.5rem;">
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:.25rem;">Knockout Bracket</div>
+    <div style="font-size:.8rem;color:var(--muted);">Auto-updates as results come in. Group stage is complete -- final standings below.</div>
+  </div>`;
+
+  html += '<div class="bk-wrap">';
+
+  html += `<div class="bk-round"><div class="bk-round-label">Round of 32</div>`;
+  r32Data.forEach((d,i)=>{ html += bracketMatchHtml(d, `R32 · ${i+1}`); });
+  html += '</div>';
+
+  html += `<div class="bk-round"><div class="bk-round-label">Round of 16</div>`;
+  r16Data.forEach((d,i)=>{ html += bracketMatchHtml(d, `R16 · ${i+1}`); });
+  html += '</div>';
+
+  html += `<div class="bk-round"><div class="bk-round-label">Quarterfinals</div>`;
+  qfData.forEach((d,i)=>{ html += bracketMatchHtml(d, `QF · ${i+1}`); });
+  html += '</div>';
+
+  html += `<div class="bk-round"><div class="bk-round-label">Semifinals</div>`;
+  sfData.forEach((d,i)=>{ html += bracketMatchHtml(d, `SF · ${i+1}`); });
+  html += '</div>';
+
+  html += `<div class="bk-final-wrap">
+    <div class="bk-round-label">Final</div>
+    ${bracketMatchHtml(finalData, "Final")}
+    <div class="bk-round-label" style="margin-top:.75rem;">3rd Place</div>
+    ${bracketMatchHtml(thirdData, "3rd Place")}
+  </div>`;
+
+  html += '</div>'; // bk-wrap
+
+  // ── GROUP STAGE -- FROZEN FINAL STANDINGS ──────────────────────────────────
+  html += `<div style="margin-top:2.5rem;margin-bottom:1rem;padding-top:1.5rem;border-top:1px solid var(--border2);">
+    <div style="font-size:1rem;font-weight:700;color:var(--gold);">Group Stage -- Final Standings</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-top:2px;">Group play concluded. Top 2 in green advanced automatically; additional teams advanced as best third-place finishers.</div>
+  </div>`;
+
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;">';
   for(const [grp, teams] of Object.entries(GROUPS)){
     const standings = calcGroupStandings(teams, completed);
     html += `<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
@@ -881,25 +1048,6 @@ function renderBracket(data){
     html += '</table></div>';
   }
   html += '</div>';
-
-  // Knockout matches if any
-  const koMatches = completed.filter(f=>!((f.stage||'').toLowerCase().includes('group')));
-  if(koMatches.length){
-    html += `<div style="margin-top:2rem;">
-      <div style="font-size:.85rem;font-weight:700;color:var(--gold);margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border2);">Knockout Stage</div>
-      <div style="display:flex;flex-direction:column;gap:.5rem;">`;
-    koMatches.forEach(f=>{
-      const h=norm(f.homeTeam?.name||''), a=norm(f.awayTeam?.name||'');
-      const hg=f.score?.fullTime?.home??0, ag=f.score?.fullTime?.away??0;
-      const hd=getDrafter(h), ad=getDrafter(a);
-      html+=`<div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:.6rem 1rem;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:1rem;font-size:.82rem;">
-        <div style="display:flex;align-items:center;gap:8px;">${teamImg(h,f.homeTeam?.crest)}<span style="font-weight:600">${h}</span>${hd?`<span style="font-size:.65rem;color:var(--${DC[hd]}-col)">${hd[0]}</span>`:''}</div>
-        <div style="font-weight:800;font-size:1.1rem;text-align:center;">${hg}–${ag}</div>
-        <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;">${ad?`<span style="font-size:.65rem;color:var(--${DC[ad]}-col)">${ad[0]}</span>`:''}<span style="font-weight:600">${a}</span>${teamImg(a,f.awayTeam?.crest)}</div>
-      </div>`;
-    });
-    html += '</div></div>';
-  }
 
   el.innerHTML = html;
 }
