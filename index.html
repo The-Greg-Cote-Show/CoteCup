@@ -1114,21 +1114,7 @@ function renderBracket(data){
       ${boxes}
       ${centerHtml}
     </div>
-  </div>
-  <script>
-    (function(){
-      var wrap = document.getElementById('bkxScaleWrap');
-      var canvas = wrap.parentElement;
-      function fit(){
-        var avail = canvas.parentElement.clientWidth;
-        var scale = Math.min(1, avail / ${totalWidth});
-        wrap.style.transform = 'scale(' + scale + ')';
-        canvas.style.height = (${totalHeight} * scale) + 'px';
-      }
-      fit();
-      window.addEventListener('resize', fit);
-    })();
-  </script>`;
+  </div>`;
 
   html += `<div style="margin-top:2.5rem;margin-bottom:1rem;padding-top:1.5rem;border-top:1px solid var(--border2);">
     <div style="font-size:1rem;font-weight:700;color:var(--gold);">Group Stage -- Final Standings</div>
@@ -1162,6 +1148,30 @@ function renderBracket(data){
   html += '</div>';
 
   el.innerHTML = html;
+  fitBracket();
+}
+
+// Resizes the bracket canvas to fit the available panel width. Defined as a
+// normal top-level function (not an inline script tag inserted via innerHTML)
+// because an inline script element closed with the literal closing-script
+// text inside a template string breaks the page: the browser's HTML parser
+// scans for that literal text regardless of JS string context, and closes
+// the page's real script block right there -- turning everything after it
+// into plain rendered text on the page. This caused the full-site outage.
+function fitBracket(){
+  const wrap = document.getElementById('bkxScaleWrap');
+  if(!wrap) return;
+  const canvas = wrap.parentElement;
+  const totalWidth = wrap.offsetWidth;
+  const totalHeight = wrap.offsetHeight;
+  function fit(){
+    const avail = canvas.parentElement.clientWidth;
+    const scale = Math.min(1, avail / totalWidth);
+    wrap.style.transform = 'scale(' + scale + ')';
+    canvas.style.height = (totalHeight * scale) + 'px';
+  }
+  fit();
+  window.addEventListener('resize', fit);
 }
 
 // ── STANDINGS OVER TIME CHART ──────────────────────────────────────────────────
