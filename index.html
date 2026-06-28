@@ -845,27 +845,6 @@ function calcGroupStandings(groupTeams, completed){
   return Object.entries(stats).sort((a,b)=>b[1].pts-a[1].pts||b[1].gd-a[1].gd||b[1].gf-a[1].gf);
 }
 
-// ── KNOCKOUT BRACKET STRUCTURE ──────────────────────────────────────────────
-// Fixed FIFA bracket positions for the 32-team knockout stage. Slot labels are
-// descriptive only (never shown) -- actual team names are looked up live from
-// API fixtures by matching on which two teams played which match number.
-// Round of 32: 16 matches (73-88). Round of 16: 8 matches (89-96).
-// Quarterfinals: 4 matches (97-100). Semifinals: 2 (101-102). 3rd place (103). Final (104).
-const BRACKET_R32 = [
-  {m:73, label:"Match 73"}, {m:74, label:"Match 74"}, {m:75, label:"Match 75"}, {m:76, label:"Match 76"},
-  {m:77, label:"Match 77"}, {m:78, label:"Match 78"}, {m:79, label:"Match 79"}, {m:80, label:"Match 80"},
-  {m:81, label:"Match 81"}, {m:82, label:"Match 82"}, {m:83, label:"Match 83"}, {m:84, label:"Match 84"},
-  {m:85, label:"Match 85"}, {m:86, label:"Match 86"}, {m:87, label:"Match 87"}, {m:88, label:"Match 88"},
-];
-// Each R16 match's two feeder R32 match numbers, in bracket order
-const BRACKET_R16_FEEDS = [[73,75],[74,77],[76,78],[79,80],[83,84],[81,82],[86,88],[87,85]];
-const BRACKET_QF_FEEDS  = [[0,2],[1,3],[5,7],[4,6]]; // indices into R16 winners, reordered to match bracket flow
-const BRACKET_SF_FEEDS  = [[0,1],[2,3]]; // indices into QF winners
-
-function getStageFixtures(allFixtures, stageNames){
-  return allFixtures.filter(f => stageNames.includes((f.stage||'').toUpperCase()));
-}
-
 // Given a list of knockout fixtures for a stage, find the one at a given bracket
 // position by matching against the previous round's two winners (or null if R32).
 function matchCardData(f){
@@ -881,27 +860,32 @@ function matchCardData(f){
   };
 }
 
-function bracketMatchHtml(data, slotLabel){
-  if(!data){
-    return `<div class="bk-match bk-empty"><div class="bk-slot-label">${slotLabel}</div></div>`;
-  }
-  const hd=getDrafter(data.home), ad=getDrafter(data.away);
-  const homeWin = data.winner===data.home, awayWin=data.winner===data.away;
-  const scoreTxt = data.isDone ? `${data.hg}–${data.ag}${data.penalties?' (pens)':''}` :
-                   data.isLive ? `${data.hg??0}–${data.ag??0}` : 'vs';
-  return `<div class="bk-match">
-    <div class="bk-team ${homeWin?'bk-winner':''}">
-      ${teamImg(data.home,data.homeCrest,"16px")}
-      <span class="bk-team-name">${data.home}</span>
-      ${hd?`<span class="bk-drafter" style="color:var(--${DC[hd]}-col)">${hd[0]}</span>`:''}
-    </div>
-    <div class="bk-score ${data.isLive?'bk-live':''}">${scoreTxt}</div>
-    <div class="bk-team ${awayWin?'bk-winner':''}">
-      ${teamImg(data.away,data.awayCrest,"16px")}
-      <span class="bk-team-name">${data.away}</span>
-      ${ad?`<span class="bk-drafter" style="color:var(--${DC[ad]}-col)">${ad[0]}</span>`:''}
-    </div>
-  </div>`;
+// Fixed visual order matching the official FIFA bracket as broadcast (FOX
+// graphic) -- each entry is a [teamA, teamB] pair in fixed left-to-right /
+// top-to-bottom slot order. This does NOT change which teams play which --
+// it only controls the order matches are displayed in, so the bracket reads
+// the same way fans see it on TV.
+const BRACKET_ORDER_LEFT = [
+  ["Germany","Paraguay"], ["France","Sweden"],
+  ["South Africa","Canada"], ["Netherlands","Morocco"],
+  ["Portugal","Croatia"], ["Spain","Austria"],
+  ["United States","Bosnia and Herzegovina"], ["Belgium","Senegal"],
+];
+const BRACKET_ORDER_RIGHT = [
+  ["Brazil","Japan"], ["Côte d'Ivoire","Norway"],
+  ["Mexico","Ecuador"], ["England","DR Congo"],
+  ["Argentina","Cabo Verde"], ["Australia","Egypt"],
+  ["Switzerland","Algeria"], ["Colombia","Ghana"],
+];
+
+function orderR32(r32Data, orderPairs){
+  // Re-sort the real match data to match the fixed display order above,
+  // by checking which two teams are in each match (order-independent).
+  return orderPairs.map(([a,b])=>{
+    return r32Data.find(d => d && (
+      (d.home===a && d.away===b) || (d.home===b && d.away===a)
+    )) || null;
+  });
 }
 
 function renderBracket(data){
@@ -923,8 +907,9 @@ function renderBracket(data){
     else if(s.includes('SEMI')) byStage.sf.push(f);
   });
 
-  const r32Sorted = [...byStage.r32].sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
-  const r32Data = r32Sorted.map(matchCardData);
+  const r32DataAll = byStage.r32.map(matchCardData);
+  const leftR32  = orderR32(r32DataAll, BRACKET_ORDER_LEFT);
+  const rightR32 = orderR32(r32DataAll, BRACKET_ORDER_RIGHT);
 
   function findNextRoundMatch(stageFixtures, feederData, feedIdxA, feedIdxB){
     const teamA = feederData[feedIdxA]?.winner;
@@ -937,12 +922,26 @@ function renderBracket(data){
     return found ? matchCardData(found) : null;
   }
 
-  const r16Data = BRACKET_R16_FEEDS.map(([a,b]) => findNextRoundMatch(byStage.r16, r32Data, a-73, b-73));
-  const qfData = BRACKET_QF_FEEDS.map(([a,b]) => findNextRoundMatch(byStage.qf, r16Data, a, b));
-  const sfData = BRACKET_SF_FEEDS.map(([a,b]) => findNextRoundMatch(byStage.sf, qfData, a, b));
-  const finalData = sfData[0] && sfData[1]
+  // R16/QF/SF feeds are now simply "pairs of adjacent boxes in display order"
+  // on each side -- index 0+1 feed into R16 box 0, 2+3 feed into R16 box 1, etc.
+  function buildRound(prevRoundData, stageFixtures){
+    const out = [];
+    for(let i=0;i<prevRoundData.length;i+=2){
+      out.push(findNextRoundMatch(stageFixtures, prevRoundData, i, i+1));
+    }
+    return out;
+  }
+
+  const leftR16 = buildRound(leftR32, byStage.r16);
+  const rightR16 = buildRound(rightR32, byStage.r16);
+  const leftQF = buildRound(leftR16, byStage.qf);
+  const rightQF = buildRound(rightR16, byStage.qf);
+  const leftSF = buildRound(leftQF, byStage.sf);
+  const rightSF = buildRound(rightQF, byStage.sf);
+
+  const finalData = (leftSF[0] && rightSF[0])
     ? (function(){
-        const teamA = sfData[0]?.winner, teamB = sfData[1]?.winner;
+        const teamA = leftSF[0]?.winner, teamB = rightSF[0]?.winner;
         const found = byStage.final.find(f=>{
           const h=norm(f.homeTeam?.name||''), a=norm(f.awayTeam?.name||'');
           return (h===teamA&&a===teamB)||(h===teamB&&a===teamA);
@@ -952,16 +951,7 @@ function renderBracket(data){
     : null;
   const thirdData = byStage.third.length ? matchCardData(byStage.third[0]) : null;
 
-  const leftR32  = r32Data.slice(0,8);
-  const rightR32 = r32Data.slice(8,16);
-  const leftR16  = r16Data.slice(0,4);
-  const rightR16 = r16Data.slice(4,8);
-  const leftQF   = qfData.slice(0,2);
-  const rightQF  = qfData.slice(2,4);
-  const leftSF   = sfData.slice(0,1);
-  const rightSF  = sfData.slice(1,2);
-
-  function miniMatch(d){
+  function miniMatch(d, scale){
     if(!d || !d.home || !d.away){
       return `<div class="bkx-match bkx-empty"></div>`;
     }
@@ -973,13 +963,13 @@ function renderBracket(data){
     const aAvatar = ad ? `<img class="bkx-avatar" src="${AVATARS[ad]}" alt="${ad}" title="${ad}">` : '';
     return `<div class="bkx-match ${d.isLive?'bkx-live-match':''}">
       <div class="bkx-row ${homeWin?'bkx-win':''}">
-        ${teamImg(d.home,d.homeCrest,"1.4rem")}
+        ${teamImg(d.home,d.homeCrest,"1.1rem")}
         <span class="bkx-name">${d.home}</span>
         ${hAvatar}
         <span class="bkx-s">${hScore}</span>
       </div>
       <div class="bkx-row ${awayWin?'bkx-win':''}">
-        ${teamImg(d.away,d.awayCrest,"1.4rem")}
+        ${teamImg(d.away,d.awayCrest,"1.1rem")}
         <span class="bkx-name">${d.away}</span>
         ${aAvatar}
         <span class="bkx-s">${aScore}</span>
@@ -987,79 +977,127 @@ function renderBracket(data){
     </div>`;
   }
 
-  // ── BRACKET GEOMETRY ─────────────────────────────────────────────────────
-  // Fixed pixel layout so connector lines can be drawn precisely with SVG.
-  // Every round's match boxes are vertically centered between their two
-  // feeder boxes from the previous round -- this is what actually makes it
-  // read as a bracket instead of a loose grid.
-  const CARD_H = 64;     // height of one match box
-  const CARD_W = 200;    // width of one match box
-  const COL_GAP = 70;    // horizontal gap between columns (room for connectors)
-  const R32_GAP = 16;    // vertical gap between adjacent R32 boxes
+  // ── BRACKET GEOMETRY -- single shared coordinate system ───────────────────
+  // All boxes (both sides, all rounds) and all connector lines are placed as
+  // absolutely-positioned elements inside ONE container, using one shared
+  // pixel coordinate system. This avoids any flex/absolute mixing issues that
+  // caused columns to overlap previously.
+  const CARD_H = 46, CARD_W = 168, V_GAP = 10, COL_W = 200;
+  const NUM_COLS_PER_SIDE = 4; // R32, R16, QF, SF
+  const CENTER_W = 200;
 
-  // Y-center (in px, relative to bracket top) of each R32 box on one side
   const r32Centers = [];
-  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+R32_GAP) + CARD_H/2); }
-  // Each later round's box sits at the midpoint of its two feeder centers
-  const r16Centers = [0,1,2,3].map(i => (r32Centers[i*2] + r32Centers[i*2+1]) / 2);
-  const qfCenters   = [0,1].map(i => (r16Centers[i*2] + r16Centers[i*2+1]) / 2);
-  const sfCenter    = (qfCenters[0] + qfCenters[1]) / 2;
+  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+V_GAP) + CARD_H/2); }
+  const r16Centers = [0,1,2,3].map(i => (r32Centers[i*2]+r32Centers[i*2+1])/2);
+  const qfCenters  = [0,1].map(i => (r16Centers[i*2]+r16Centers[i*2+1])/2);
+  const sfCenter   = (qfCenters[0]+qfCenters[1])/2;
   const totalHeight = r32Centers[7] + CARD_H/2;
+  const totalWidth = NUM_COLS_PER_SIDE*2*COL_W + CENTER_W;
 
-  function colHtml(items, centers, side){
-    // side: 'left' or 'right' -- affects which edge connectors draw from
-    let s = `<div style="position:relative;width:${CARD_W}px;height:${totalHeight}px;">`;
+  // x-position (left edge) of each column, left side then right side
+  const colX = {
+    leftR32: 0, leftR16: COL_W, leftQF: COL_W*2, leftSF: COL_W*3,
+    center:  COL_W*4,
+    rightSF: COL_W*4 + CENTER_W, rightQF: COL_W*5 + CENTER_W,
+    rightR16: COL_W*6 + CENTER_W, rightR32: COL_W*7 + CENTER_W,
+  };
+
+  function boxesHtml(items, centers, x){
+    let s = '';
     items.forEach((d,i)=>{
       const top = centers[i] - CARD_H/2;
-      s += `<div style="position:absolute;top:${top}px;left:0;width:${CARD_W}px;height:${CARD_H}px;">${miniMatch(d)}</div>`;
+      s += `<div style="position:absolute;left:${x}px;top:${top}px;width:${CARD_W}px;height:${CARD_H}px;">${miniMatch(d)}</div>`;
     });
-    s += '</div>';
     return s;
   }
 
-  // SVG connector lines between two adjacent columns. side determines stroke
-  // direction is irrelevant since lines are symmetric -- only column widths
-  // and centers matter.
-  function connectorSvg(centersFrom, width){
-    const half = COL_GAP/2;
+  // Connector lines from a column of boxes (right edge at x+CARD_W) into the
+  // next column's box (left edge at xNext), for each adjacent pair.
+  function connectors(centersFrom, xFrom, xNext){
     let paths = '';
+    const xRight = xFrom + CARD_W;
+    const xMid = xFrom + COL_W - (COL_W-CARD_W)/2; // midpoint between columns
     for(let i=0;i<centersFrom.length;i+=2){
       const yA = centersFrom[i], yB = centersFrom[i+1];
       const yMid = (yA+yB)/2;
-      // From box A: right edge, half-way across the gap, down/up to midpoint, then to box B start
-      paths += `<path d="M0,${yA} H${half} V${yMid}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
-      paths += `<path d="M0,${yB} H${half} V${yMid}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
-      paths += `<path d="M${half},${yMid} H${width}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
+      paths += `<path d="M${xRight},${yA} H${xMid} V${yMid} H${xNext}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
+      paths += `<path d="M${xRight},${yB} H${xMid} V${yMid}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
     }
-    return `<svg width="${width}" height="${totalHeight}" style="display:block;overflow:visible;">${paths}</svg>`;
+    return paths;
+  }
+  // Mirror version for right side (lines run leftward into center)
+  function connectorsRev(centersFrom, xFrom, xNext){
+    let paths = '';
+    const xLeft = xFrom;
+    const xMid = xFrom - (COL_W-CARD_W)/2;
+    for(let i=0;i<centersFrom.length;i+=2){
+      const yA = centersFrom[i], yB = centersFrom[i+1];
+      const yMid = (yA+yB)/2;
+      paths += `<path d="M${xLeft},${yA} H${xMid} V${yMid} H${xNext+CARD_W}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
+      paths += `<path d="M${xLeft},${yB} H${xMid} V${yMid}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
+    }
+    return paths;
   }
 
-  function connectorWrap(centersFrom){
-    return `<div style="display:flex;align-items:center;height:${totalHeight}px;">${connectorSvg(centersFrom, COL_GAP)}</div>`;
-  }
+  let svgPaths = '';
+  svgPaths += connectors(r32Centers, colX.leftR32, colX.leftR16);
+  svgPaths += connectors(r16Centers, colX.leftR16, colX.leftQF);
+  svgPaths += connectors(qfCenters, colX.leftQF, colX.leftSF);
+  svgPaths += connectors([sfCenter], colX.leftSF, colX.center); // SF -> center final (single line)
+  svgPaths += connectorsRev(r32Centers, colX.rightR32, colX.rightR16);
+  svgPaths += connectorsRev(r16Centers, colX.rightR16, colX.rightQF);
+  svgPaths += connectorsRev(qfCenters, colX.rightQF, colX.rightSF);
+  svgPaths += connectorsRev([sfCenter], colX.rightSF, colX.center);
 
   const champion = finalData?.isDone ? finalData.winner : null;
 
+  let boxes = '';
+  boxes += boxesHtml(leftR32, r32Centers, colX.leftR32);
+  boxes += boxesHtml(leftR16, r16Centers, colX.leftR16);
+  boxes += boxesHtml(leftQF, qfCenters, colX.leftQF);
+  boxes += boxesHtml(leftSF, [sfCenter], colX.leftSF);
+  boxes += boxesHtml(rightSF, [sfCenter], colX.rightSF);
+  boxes += boxesHtml(rightQF, qfCenters, colX.rightQF);
+  boxes += boxesHtml(rightR16, r16Centers, colX.rightR16);
+  boxes += boxesHtml(rightR32, r32Centers, colX.rightR32);
+
+  const centerTop = totalHeight/2 - 150;
+  const centerHtml = `
+    <div style="position:absolute;left:${colX.center}px;top:${centerTop}px;width:${CENTER_W-20}px;">
+      <div class="bkx-final-box">
+        <div class="bkx-final-label">Final</div>
+        ${miniMatch(finalData)}
+      </div>
+    </div>
+    <div style="position:absolute;left:${colX.center}px;top:${centerTop+110}px;width:${CENTER_W-20}px;">
+      <div class="bkx-champion-box">
+        <div class="bkx-champion-label">Champion</div>
+        <div class="bkx-champion-name">${champion||'\u2014'}</div>
+      </div>
+    </div>
+    <div style="position:absolute;left:${colX.center}px;top:${centerTop+220}px;width:${CENTER_W-20}px;">
+      <div class="bkx-final-box">
+        <div class="bkx-final-label">3rd Place</div>
+        ${miniMatch(thirdData)}
+      </div>
+    </div>`;
+
   let html = `<style>
-    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:.85rem;display:flex;flex-direction:column;gap:3px;width:100%;height:100%;justify-content:center;box-sizing:border-box;}
-    .bkx-empty{background:var(--panel2);opacity:.35;}
-    .bkx-row{display:flex;align-items:center;gap:6px;padding:2px 0;}
+    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:3px 7px;font-size:.66rem;display:flex;flex-direction:column;gap:1px;width:100%;height:100%;justify-content:center;box-sizing:border-box;}
+    .bkx-empty{background:var(--panel2);opacity:.3;}
+    .bkx-row{display:flex;align-items:center;gap:4px;padding:1px 0;}
     .bkx-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);}
     .bkx-win .bkx-name{color:var(--text);font-weight:700;}
-    .bkx-avatar{width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border2);}
-    .bkx-s{font-size:.85rem;font-weight:700;min-width:18px;text-align:right;color:var(--muted);}
+    .bkx-avatar{width:16px;height:16px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border2);}
+    .bkx-s{font-size:.66rem;font-weight:700;min-width:13px;text-align:right;color:var(--muted);}
     .bkx-win .bkx-s{color:var(--gold);}
     .bkx-live-match{border-color:var(--red);}
-    .bkx-final-box{background:var(--panel3);border:1px solid var(--gold);border-radius:12px;padding:.85rem 1rem;width:230px;}
-    .bkx-final-label{font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:6px;}
-    .bkx-champion-box{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--gold2);border-radius:12px;padding:1rem;width:230px;text-align:center;}
-    .bkx-champion-label{font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
-    .bkx-champion-name{font-size:1.2rem;font-weight:900;color:var(--gold2);margin-top:6px;min-height:1.3em;}
-    .bkx-outer{display:flex;align-items:center;overflow-x:auto;padding-bottom:1rem;}
-    @media(max-width:1300px){
-      .bkx-outer svg{display:none;}
-      .bkx-outer{flex-direction:column;}
-    }
+    .bkx-final-box{background:var(--panel3);border:1px solid var(--gold);border-radius:10px;padding:.5rem .6rem;}
+    .bkx-final-label{font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:4px;}
+    .bkx-champion-box{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--gold2);border-radius:10px;padding:.6rem;text-align:center;}
+    .bkx-champion-label{font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+    .bkx-champion-name{font-size:.9rem;font-weight:900;color:var(--gold2);margin-top:4px;min-height:1.1em;}
+    .bkx-canvas{position:relative;width:100%;}
   </style>`;
 
   html += `<div style="margin-bottom:1.25rem;">
@@ -1067,39 +1105,30 @@ function renderBracket(data){
     <div style="font-size:.8rem;color:var(--muted);">Auto-updates as results come in. Group stage is complete -- final standings below.</div>
   </div>`;
 
-  html += '<div class="bkx-outer">';
-  html += colHtml(leftR32, r32Centers, 'left');
-  html += connectorWrap(r32Centers);
-  html += colHtml(leftR16, r16Centers, 'left');
-  html += connectorWrap(r16Centers);
-  html += colHtml(leftQF, qfCenters, 'left');
-  html += connectorWrap(qfCenters);
-  html += colHtml(leftSF, [sfCenter], 'left');
-
-  // Center: final / champion / 3rd place, vertically centered on the whole bracket
-  html += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;height:${totalHeight}px;width:260px;flex-shrink:0;">
-    <div class="bkx-final-box">
-      <div class="bkx-final-label">Final</div>
-      ${miniMatch(finalData)}
+  // Scale the whole bracket (via CSS transform) so totalWidth fits the
+  // panel without ever needing horizontal scroll -- this is the key fix
+  // for "need the full field visible, no scroll."
+  html += `<div class="bkx-canvas" style="height:${totalHeight}px;">
+    <div id="bkxScaleWrap" style="position:absolute;top:0;left:0;width:${totalWidth}px;height:${totalHeight}px;transform-origin:top left;">
+      <svg width="${totalWidth}" height="${totalHeight}" style="position:absolute;top:0;left:0;">${svgPaths}</svg>
+      ${boxes}
+      ${centerHtml}
     </div>
-    <div class="bkx-champion-box">
-      <div class="bkx-champion-label">Champion</div>
-      <div class="bkx-champion-name">${champion||'\u2014'}</div>
-    </div>
-    <div class="bkx-final-box">
-      <div class="bkx-final-label">3rd Place</div>
-      ${miniMatch(thirdData)}
-    </div>
-  </div>`;
-
-  html += colHtml(rightSF, [sfCenter], 'right');
-  html += connectorWrap(qfCenters);
-  html += colHtml(rightQF, qfCenters, 'right');
-  html += connectorWrap(r16Centers);
-  html += colHtml(rightR16, r16Centers, 'right');
-  html += connectorWrap(r32Centers);
-  html += colHtml(rightR32, r32Centers, 'right');
-  html += '</div>';
+  </div>
+  <script>
+    (function(){
+      var wrap = document.getElementById('bkxScaleWrap');
+      var canvas = wrap.parentElement;
+      function fit(){
+        var avail = canvas.parentElement.clientWidth;
+        var scale = Math.min(1, avail / ${totalWidth});
+        wrap.style.transform = 'scale(' + scale + ')';
+        canvas.style.height = (${totalHeight} * scale) + 'px';
+      }
+      fit();
+      window.addEventListener('resize', fit);
+    })();
+  </script>`;
 
   html += `<div style="margin-top:2.5rem;margin-bottom:1rem;padding-top:1.5rem;border-top:1px solid var(--border2);">
     <div style="font-size:1rem;font-weight:700;color:var(--gold);">Group Stage -- Final Standings</div>
