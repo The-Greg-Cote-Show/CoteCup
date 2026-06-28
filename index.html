@@ -914,11 +914,8 @@ function renderBracket(data){
   const completed = data?.fixtures?.completed||[];
   const allF = data?.fixtures?.all || completed;
 
-  // Pull all non-group fixtures, keyed by team-pair so we can find each match
-  // regardless of what FIFA match number the provider assigns internally.
   const koAll = allF.filter(f => !((f.stage||'').toLowerCase().includes('group')));
 
-  // Bucket knockout fixtures by stage name (provider-specific strings, checked broadly)
   const byStage = { r32:[], r16:[], qf:[], sf:[], third:[], final:[] };
   koAll.forEach(f=>{
     const s = (f.stage||'').toUpperCase();
@@ -930,13 +927,9 @@ function renderBracket(data){
     else if(s.includes('SEMI')) byStage.sf.push(f);
   });
 
-  // R32: sort by utcDate so position is at least stable/chronological since we
-  // can't get FIFA's official match-73-88 numbering from the API directly.
   const r32Sorted = [...byStage.r32].sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
   const r32Data = r32Sorted.map(matchCardData);
 
-  // Helper: find a later-round match by checking if both its teams are winners
-  // of two specific earlier matches (by index into the earlier round's data array)
   function findNextRoundMatch(stageFixtures, feederData, feedIdxA, feedIdxB){
     const teamA = feederData[feedIdxA]?.winner;
     const teamB = feederData[feedIdxB]?.winner;
@@ -948,12 +941,7 @@ function renderBracket(data){
     return found ? matchCardData(found) : null;
   }
 
-  const r16Data = BRACKET_R16_FEEDS.map(([a,b], i) => {
-    const idxA = r32Sorted.findIndex((_,idx)=>idx===a-73);
-    const idxB = r32Sorted.findIndex((_,idx)=>idx===b-73);
-    return findNextRoundMatch(byStage.r16, r32Data, a-73, b-73);
-  });
-
+  const r16Data = BRACKET_R16_FEEDS.map(([a,b]) => findNextRoundMatch(byStage.r16, r32Data, a-73, b-73));
   const qfData = BRACKET_QF_FEEDS.map(([a,b]) => findNextRoundMatch(byStage.qf, r16Data, a, b));
   const sfData = BRACKET_SF_FEEDS.map(([a,b]) => findNextRoundMatch(byStage.sf, qfData, a, b));
   const finalData = sfData[0] && sfData[1]
@@ -968,56 +956,99 @@ function renderBracket(data){
     : null;
   const thirdData = byStage.third.length ? matchCardData(byStage.third[0]) : null;
 
+  const leftR32  = r32Data.slice(0,8);
+  const rightR32 = r32Data.slice(8,16);
+  const leftR16  = r16Data.slice(0,4);
+  const rightR16 = r16Data.slice(4,8);
+  const leftQF   = qfData.slice(0,2);
+  const rightQF  = qfData.slice(2,4);
+  const leftSF   = sfData.slice(0,1);
+  const rightSF  = sfData.slice(1,2);
+
+  function miniMatch(d){
+    if(!d){
+      return `<div class="bkx-match bkx-empty"></div>`;
+    }
+    const hd=getDrafter(d.home), ad=getDrafter(d.away);
+    const homeWin = d.winner===d.home, awayWin=d.winner===d.away;
+    const hScore = d.isDone||d.isLive ? (d.hg??'') : '';
+    const aScore = d.isDone||d.isLive ? (d.ag??'') : '';
+    const hAvatar = hd ? `<img class="bkx-avatar" src="${AVATARS[hd]}" alt="${hd}" title="${hd}">` : '';
+    const aAvatar = ad ? `<img class="bkx-avatar" src="${AVATARS[ad]}" alt="${ad}" title="${ad}">` : '';
+    return `<div class="bkx-match ${d.isLive?'bkx-live-match':''}">
+      <div class="bkx-row ${homeWin?'bkx-win':''}">
+        ${teamImg(d.home,d.homeCrest,"14px")}
+        <span class="bkx-name">${d.home}</span>
+        ${hAvatar}
+        <span class="bkx-s">${hScore}</span>
+      </div>
+      <div class="bkx-row ${awayWin?'bkx-win':''}">
+        ${teamImg(d.away,d.awayCrest,"14px")}
+        <span class="bkx-name">${d.away}</span>
+        ${aAvatar}
+        <span class="bkx-s">${aScore}</span>
+      </div>
+    </div>`;
+  }
+
   let html = `<style>
-    .bk-wrap{display:flex;gap:1rem;overflow-x:auto;padding-bottom:1rem;}
-    .bk-round{display:flex;flex-direction:column;justify-content:space-around;gap:.6rem;min-width:200px;}
-    .bk-round-label{font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:.25rem;}
-    .bk-match{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:.5rem .6rem;display:flex;flex-direction:column;gap:4px;font-size:.74rem;flex:1;justify-content:center;}
-    .bk-empty{background:var(--panel2);opacity:.5;min-height:54px;align-items:center;justify-content:center;}
-    .bk-slot-label{font-size:.62rem;color:var(--muted);text-align:center;}
-    .bk-team{display:flex;align-items:center;gap:5px;padding:1px 0;}
-    .bk-team-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .bk-winner .bk-team-name{font-weight:700;color:var(--text);}
-    .bk-team:not(.bk-winner) .bk-team-name{color:var(--muted);}
-    .bk-drafter{font-size:.6rem;font-weight:700;}
-    .bk-score{font-size:.65rem;color:var(--muted);text-align:center;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:1px 0;margin:1px 0;}
-    .bk-score.bk-live{color:var(--red);font-weight:700;}
-    .bk-final-wrap{display:flex;flex-direction:column;align-items:center;gap:.5rem;min-width:200px;justify-content:center;}
+    .bkx-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1.4fr 1fr 1fr 1fr 1fr;gap:0 .5rem;align-items:center;}
+    .bkx-col{display:flex;flex-direction:column;justify-content:space-around;height:100%;gap:.5rem;}
+    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:3px 5px;font-size:.62rem;display:flex;flex-direction:column;gap:1px;min-height:36px;}
+    .bkx-empty{background:var(--panel2);opacity:.4;}
+    .bkx-row{display:flex;align-items:center;gap:3px;padding:1px 0;}
+    .bkx-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);}
+    .bkx-win .bkx-name{color:var(--text);font-weight:700;}
+    .bkx-avatar{width:14px;height:14px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border2);}
+    .bkx-s{font-size:.62rem;font-weight:700;min-width:12px;text-align:right;color:var(--muted);}
+    .bkx-win .bkx-s{color:var(--gold);}
+    .bkx-live-match{border-color:var(--red);}
+    .bkx-center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;height:100%;}
+    .bkx-final-box{background:var(--panel3);border:1px solid var(--gold);border-radius:10px;padding:.6rem .75rem;width:100%;max-width:170px;}
+    .bkx-final-label{font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:4px;}
+    .bkx-champion-box{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--gold2);border-radius:10px;padding:.7rem;width:100%;max-width:170px;text-align:center;}
+    .bkx-champion-label{font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+    .bkx-champion-name{font-size:.9rem;font-weight:900;color:var(--gold2);margin-top:4px;min-height:1.2em;}
+    .bkx-round-hdr{font-size:.58rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:.4rem;}
+    @media(max-width:900px){
+      .bkx-grid{display:flex;flex-direction:column;gap:1rem;overflow-x:auto;}
+      .bkx-col{flex-direction:row;overflow-x:auto;min-width:max-content;}
+      .bkx-match{min-width:140px;}
+    }
   </style>`;
 
-  html += `<div style="margin-bottom:1.5rem;">
+  html += `<div style="margin-bottom:1.25rem;">
     <div style="font-size:1.1rem;font-weight:700;margin-bottom:.25rem;">Knockout Bracket</div>
     <div style="font-size:.8rem;color:var(--muted);">Auto-updates as results come in. Group stage is complete -- final standings below.</div>
   </div>`;
 
-  html += '<div class="bk-wrap">';
+  const champion = finalData?.isDone ? finalData.winner : null;
 
-  html += `<div class="bk-round"><div class="bk-round-label">Round of 32</div>`;
-  r32Data.forEach((d,i)=>{ html += bracketMatchHtml(d, `R32 · ${i+1}`); });
-  html += '</div>';
-
-  html += `<div class="bk-round"><div class="bk-round-label">Round of 16</div>`;
-  r16Data.forEach((d,i)=>{ html += bracketMatchHtml(d, `R16 · ${i+1}`); });
-  html += '</div>';
-
-  html += `<div class="bk-round"><div class="bk-round-label">Quarterfinals</div>`;
-  qfData.forEach((d,i)=>{ html += bracketMatchHtml(d, `QF · ${i+1}`); });
-  html += '</div>';
-
-  html += `<div class="bk-round"><div class="bk-round-label">Semifinals</div>`;
-  sfData.forEach((d,i)=>{ html += bracketMatchHtml(d, `SF · ${i+1}`); });
-  html += '</div>';
-
-  html += `<div class="bk-final-wrap">
-    <div class="bk-round-label">Final</div>
-    ${bracketMatchHtml(finalData, "Final")}
-    <div class="bk-round-label" style="margin-top:.75rem;">3rd Place</div>
-    ${bracketMatchHtml(thirdData, "3rd Place")}
+  html += `<div class="bkx-grid">
+    <div class="bkx-col">${leftR32.map(miniMatch).join('')}</div>
+    <div class="bkx-col">${leftR16.map(miniMatch).join('')}</div>
+    <div class="bkx-col">${leftQF.map(miniMatch).join('')}</div>
+    <div class="bkx-col">${leftSF.map(miniMatch).join('')}</div>
+    <div class="bkx-center">
+      <div class="bkx-final-box">
+        <div class="bkx-final-label">Final</div>
+        ${miniMatch(finalData)}
+      </div>
+      <div class="bkx-champion-box">
+        <div class="bkx-champion-label">Champion</div>
+        <div class="bkx-champion-name">${champion||'\u2014'}</div>
+      </div>
+      <div class="bkx-final-box">
+        <div class="bkx-final-label">3rd Place</div>
+        ${miniMatch(thirdData)}
+      </div>
+    </div>
+    <div class="bkx-col">${rightSF.map(miniMatch).join('')}</div>
+    <div class="bkx-col">${rightQF.map(miniMatch).join('')}</div>
+    <div class="bkx-col">${rightR16.map(miniMatch).join('')}</div>
+    <div class="bkx-col">${rightR32.map(miniMatch).join('')}</div>
   </div>`;
 
-  html += '</div>'; // bk-wrap
-
-  // ── GROUP STAGE -- FROZEN FINAL STANDINGS ──────────────────────────────────
   html += `<div style="margin-top:2.5rem;margin-bottom:1rem;padding-top:1.5rem;border-top:1px solid var(--border2);">
     <div style="font-size:1rem;font-weight:700;color:var(--gold);">Group Stage -- Final Standings</div>
     <div style="font-size:.78rem;color:var(--muted);margin-top:2px;">Group play concluded. Top 2 in green advanced automatically; additional teams advanced as best third-place finishers.</div>
