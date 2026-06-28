@@ -962,7 +962,6 @@ function renderBracket(data){
   const rightSF  = sfData.slice(1,2);
 
   function miniMatch(d){
-    // Guard against malformed data -- never render a card for incomplete data
     if(!d || !d.home || !d.away){
       return `<div class="bkx-match bkx-empty"></div>`;
     }
@@ -988,27 +987,62 @@ function renderBracket(data){
     </div>`;
   }
 
-  // Fixed match-card height so every round's boxes are visually identical
-  // regardless of how many matches are in that column -- this is what was
-  // causing the right side to look bigger than the left (columns with fewer
-  // items were stretching to fill available vertical space).
-  const MATCH_H = 64; // px, fixed height for every match card in every round
-  const GAP = 14; // px, fixed vertical gap between cards in every column
+  // ── BRACKET GEOMETRY ─────────────────────────────────────────────────────
+  // Fixed pixel layout so connector lines can be drawn precisely with SVG.
+  // Every round's match boxes are vertically centered between their two
+  // feeder boxes from the previous round -- this is what actually makes it
+  // read as a bracket instead of a loose grid.
+  const CARD_H = 64;     // height of one match box
+  const CARD_W = 200;    // width of one match box
+  const COL_GAP = 70;    // horizontal gap between columns (room for connectors)
+  const R32_GAP = 16;    // vertical gap between adjacent R32 boxes
 
-  function fixedCol(items, slotCount){
-    // slotCount lets a round always render the same number of visual slots
-    // even before data exists, so column heights match across all rounds.
-    const padded = items.length ? items : new Array(slotCount).fill(null);
-    return `<div class="bkx-col" style="gap:${GAP}px">${padded.map(d=>
-      `<div style="height:${MATCH_H}px;display:flex;">${miniMatch(d)}</div>`
-    ).join('')}</div>`;
+  // Y-center (in px, relative to bracket top) of each R32 box on one side
+  const r32Centers = [];
+  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+R32_GAP) + CARD_H/2); }
+  // Each later round's box sits at the midpoint of its two feeder centers
+  const r16Centers = [0,1,2,3].map(i => (r32Centers[i*2] + r32Centers[i*2+1]) / 2);
+  const qfCenters   = [0,1].map(i => (r16Centers[i*2] + r16Centers[i*2+1]) / 2);
+  const sfCenter    = (qfCenters[0] + qfCenters[1]) / 2;
+  const totalHeight = r32Centers[7] + CARD_H/2;
+
+  function colHtml(items, centers, side){
+    // side: 'left' or 'right' -- affects which edge connectors draw from
+    let s = `<div style="position:relative;width:${CARD_W}px;height:${totalHeight}px;">`;
+    items.forEach((d,i)=>{
+      const top = centers[i] - CARD_H/2;
+      s += `<div style="position:absolute;top:${top}px;left:0;width:${CARD_W}px;height:${CARD_H}px;">${miniMatch(d)}</div>`;
+    });
+    s += '</div>';
+    return s;
   }
 
+  // SVG connector lines between two adjacent columns. side determines stroke
+  // direction is irrelevant since lines are symmetric -- only column widths
+  // and centers matter.
+  function connectorSvg(centersFrom, width){
+    const half = COL_GAP/2;
+    let paths = '';
+    for(let i=0;i<centersFrom.length;i+=2){
+      const yA = centersFrom[i], yB = centersFrom[i+1];
+      const yMid = (yA+yB)/2;
+      // From box A: right edge, half-way across the gap, down/up to midpoint, then to box B start
+      paths += `<path d="M0,${yA} H${half} V${yMid}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
+      paths += `<path d="M0,${yB} H${half} V${yMid}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
+      paths += `<path d="M${half},${yMid} H${width}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
+    }
+    return `<svg width="${width}" height="${totalHeight}" style="display:block;overflow:visible;">${paths}</svg>`;
+  }
+
+  function connectorWrap(centersFrom){
+    return `<div style="display:flex;align-items:center;height:${totalHeight}px;">${connectorSvg(centersFrom, COL_GAP)}</div>`;
+  }
+
+  const champion = finalData?.isDone ? finalData.winner : null;
+
   let html = `<style>
-    .bkx-grid{display:grid;grid-template-columns:repeat(4,200px) 260px repeat(4,200px);gap:0 1rem;align-items:start;justify-content:center;}
-    .bkx-col{display:flex;flex-direction:column;}
-    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:.85rem;display:flex;flex-direction:column;gap:3px;width:100%;justify-content:center;}
-    .bkx-empty{background:var(--panel2);opacity:.4;}
+    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:.85rem;display:flex;flex-direction:column;gap:3px;width:100%;height:100%;justify-content:center;box-sizing:border-box;}
+    .bkx-empty{background:var(--panel2);opacity:.35;}
     .bkx-row{display:flex;align-items:center;gap:6px;padding:2px 0;}
     .bkx-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);}
     .bkx-win .bkx-name{color:var(--text);font-weight:700;}
@@ -1016,17 +1050,15 @@ function renderBracket(data){
     .bkx-s{font-size:.85rem;font-weight:700;min-width:18px;text-align:right;color:var(--muted);}
     .bkx-win .bkx-s{color:var(--gold);}
     .bkx-live-match{border-color:var(--red);}
-    .bkx-center{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1.25rem;padding-top:${(8*(MATCH_H+GAP)/2)-150}px;}
-    .bkx-final-box{background:var(--panel3);border:1px solid var(--gold);border-radius:12px;padding:.85rem 1rem;width:100%;max-width:230px;}
+    .bkx-final-box{background:var(--panel3);border:1px solid var(--gold);border-radius:12px;padding:.85rem 1rem;width:230px;}
     .bkx-final-label{font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:6px;}
-    .bkx-champion-box{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--gold2);border-radius:12px;padding:1rem;width:100%;max-width:230px;text-align:center;}
+    .bkx-champion-box{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--gold2);border-radius:12px;padding:1rem;width:230px;text-align:center;}
     .bkx-champion-label{font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
     .bkx-champion-name{font-size:1.2rem;font-weight:900;color:var(--gold2);margin-top:6px;min-height:1.3em;}
+    .bkx-outer{display:flex;align-items:center;overflow-x:auto;padding-bottom:1rem;}
     @media(max-width:1300px){
-      .bkx-grid{display:flex;flex-direction:column;gap:1.25rem;overflow-x:auto;}
-      .bkx-col{flex-direction:row;overflow-x:auto;min-width:max-content;}
-      .bkx-match{min-width:190px;}
-      .bkx-center{padding-top:0;}
+      .bkx-outer svg{display:none;}
+      .bkx-outer{flex-direction:column;}
     }
   </style>`;
 
@@ -1035,32 +1067,39 @@ function renderBracket(data){
     <div style="font-size:.8rem;color:var(--muted);">Auto-updates as results come in. Group stage is complete -- final standings below.</div>
   </div>`;
 
-  const champion = finalData?.isDone ? finalData.winner : null;
+  html += '<div class="bkx-outer">';
+  html += colHtml(leftR32, r32Centers, 'left');
+  html += connectorWrap(r32Centers);
+  html += colHtml(leftR16, r16Centers, 'left');
+  html += connectorWrap(r16Centers);
+  html += colHtml(leftQF, qfCenters, 'left');
+  html += connectorWrap(qfCenters);
+  html += colHtml(leftSF, [sfCenter], 'left');
 
-  html += `<div class="bkx-grid">
-    ${fixedCol(leftR32, 8)}
-    ${fixedCol(leftR16, 4)}
-    ${fixedCol(leftQF, 2)}
-    ${fixedCol(leftSF, 1)}
-    <div class="bkx-center">
-      <div class="bkx-final-box">
-        <div class="bkx-final-label">Final</div>
-        ${miniMatch(finalData)}
-      </div>
-      <div class="bkx-champion-box">
-        <div class="bkx-champion-label">Champion</div>
-        <div class="bkx-champion-name">${champion||'\u2014'}</div>
-      </div>
-      <div class="bkx-final-box">
-        <div class="bkx-final-label">3rd Place</div>
-        ${miniMatch(thirdData)}
-      </div>
+  // Center: final / champion / 3rd place, vertically centered on the whole bracket
+  html += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;height:${totalHeight}px;width:260px;flex-shrink:0;">
+    <div class="bkx-final-box">
+      <div class="bkx-final-label">Final</div>
+      ${miniMatch(finalData)}
     </div>
-    ${fixedCol(rightSF, 1)}
-    ${fixedCol(rightQF, 2)}
-    ${fixedCol(rightR16, 4)}
-    ${fixedCol(rightR32, 8)}
+    <div class="bkx-champion-box">
+      <div class="bkx-champion-label">Champion</div>
+      <div class="bkx-champion-name">${champion||'\u2014'}</div>
+    </div>
+    <div class="bkx-final-box">
+      <div class="bkx-final-label">3rd Place</div>
+      ${miniMatch(thirdData)}
+    </div>
   </div>`;
+
+  html += colHtml(rightSF, [sfCenter], 'right');
+  html += connectorWrap(qfCenters);
+  html += colHtml(rightQF, qfCenters, 'right');
+  html += connectorWrap(r16Centers);
+  html += colHtml(rightR16, r16Centers, 'right');
+  html += connectorWrap(r32Centers);
+  html += colHtml(rightR32, r32Centers, 'right');
+  html += '</div>';
 
   html += `<div style="margin-top:2.5rem;margin-bottom:1rem;padding-top:1.5rem;border-top:1px solid var(--border2);">
     <div style="font-size:1rem;font-weight:700;color:var(--gold);">Group Stage -- Final Standings</div>
