@@ -231,10 +231,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </div>
 
 <!-- BRACKET VIEW -->
-<div id="bracketView" style="display:none;max-width:1200px;margin:0 auto;padding:1.5rem;">
-  <div style="margin-bottom:1rem;">
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:.25rem;">Tournament Bracket</div>
-  </div>
+<div id="bracketView" style="display:none;max-width:1400px;margin:0 auto;padding:1.5rem;">
   <div id="bracketContent"></div>
 </div>
 
@@ -444,7 +441,7 @@ function teamImg(teamName, crestUrl, size){
   const n = norm(teamName);
   const code = FLAGS[n];
   const sz = size||"2rem";
-  const h = sz === "20px" ? "15px" : (sz === "1.5rem" ? "1.1rem" : "1.5rem");
+  const h = sz === "20px" ? "15px" : (sz === "1.5rem" ? "1.1rem" : (sz === "1.4rem" ? "1.05rem" : "1.5rem"));
   if(code){
     return `<span class="fi fi-${code}" style="width:${sz};height:${h};border-radius:2px;display:inline-block;background-size:cover;"></span>`;
   }
@@ -965,7 +962,8 @@ function renderBracket(data){
   const rightSF  = sfData.slice(1,2);
 
   function miniMatch(d){
-    if(!d){
+    // Guard against malformed data -- never render a card for incomplete data
+    if(!d || !d.home || !d.away){
       return `<div class="bkx-match bkx-empty"></div>`;
     }
     const hd=getDrafter(d.home), ad=getDrafter(d.away);
@@ -976,13 +974,13 @@ function renderBracket(data){
     const aAvatar = ad ? `<img class="bkx-avatar" src="${AVATARS[ad]}" alt="${ad}" title="${ad}">` : '';
     return `<div class="bkx-match ${d.isLive?'bkx-live-match':''}">
       <div class="bkx-row ${homeWin?'bkx-win':''}">
-        ${teamImg(d.home,d.homeCrest,"20px")}
+        ${teamImg(d.home,d.homeCrest,"1.4rem")}
         <span class="bkx-name">${d.home}</span>
         ${hAvatar}
         <span class="bkx-s">${hScore}</span>
       </div>
       <div class="bkx-row ${awayWin?'bkx-win':''}">
-        ${teamImg(d.away,d.awayCrest,"20px")}
+        ${teamImg(d.away,d.awayCrest,"1.4rem")}
         <span class="bkx-name">${d.away}</span>
         ${aAvatar}
         <span class="bkx-s">${aScore}</span>
@@ -990,10 +988,26 @@ function renderBracket(data){
     </div>`;
   }
 
+  // Fixed match-card height so every round's boxes are visually identical
+  // regardless of how many matches are in that column -- this is what was
+  // causing the right side to look bigger than the left (columns with fewer
+  // items were stretching to fill available vertical space).
+  const MATCH_H = 64; // px, fixed height for every match card in every round
+  const GAP = 14; // px, fixed vertical gap between cards in every column
+
+  function fixedCol(items, slotCount){
+    // slotCount lets a round always render the same number of visual slots
+    // even before data exists, so column heights match across all rounds.
+    const padded = items.length ? items : new Array(slotCount).fill(null);
+    return `<div class="bkx-col" style="gap:${GAP}px">${padded.map(d=>
+      `<div style="height:${MATCH_H}px;display:flex;">${miniMatch(d)}</div>`
+    ).join('')}</div>`;
+  }
+
   let html = `<style>
-    .bkx-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1.5fr 1fr 1fr 1fr 1fr;gap:0 .75rem;align-items:center;}
-    .bkx-col{display:flex;flex-direction:column;justify-content:space-around;height:100%;gap:.75rem;}
-    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:.85rem;display:flex;flex-direction:column;gap:3px;min-height:54px;}
+    .bkx-grid{display:grid;grid-template-columns:repeat(4,200px) 260px repeat(4,200px);gap:0 1rem;align-items:start;justify-content:center;}
+    .bkx-col{display:flex;flex-direction:column;}
+    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:.85rem;display:flex;flex-direction:column;gap:3px;width:100%;justify-content:center;}
     .bkx-empty{background:var(--panel2);opacity:.4;}
     .bkx-row{display:flex;align-items:center;gap:6px;padding:2px 0;}
     .bkx-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);}
@@ -1002,17 +1016,17 @@ function renderBracket(data){
     .bkx-s{font-size:.85rem;font-weight:700;min-width:18px;text-align:right;color:var(--muted);}
     .bkx-win .bkx-s{color:var(--gold);}
     .bkx-live-match{border-color:var(--red);}
-    .bkx-center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.25rem;height:100%;}
+    .bkx-center{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1.25rem;padding-top:${(8*(MATCH_H+GAP)/2)-150}px;}
     .bkx-final-box{background:var(--panel3);border:1px solid var(--gold);border-radius:12px;padding:.85rem 1rem;width:100%;max-width:230px;}
     .bkx-final-label{font-size:.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:6px;}
     .bkx-champion-box{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--gold2);border-radius:12px;padding:1rem;width:100%;max-width:230px;text-align:center;}
     .bkx-champion-label{font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
     .bkx-champion-name{font-size:1.2rem;font-weight:900;color:var(--gold2);margin-top:6px;min-height:1.3em;}
-    .bkx-round-hdr{font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:.5rem;}
-    @media(max-width:900px){
+    @media(max-width:1300px){
       .bkx-grid{display:flex;flex-direction:column;gap:1.25rem;overflow-x:auto;}
       .bkx-col{flex-direction:row;overflow-x:auto;min-width:max-content;}
       .bkx-match{min-width:190px;}
+      .bkx-center{padding-top:0;}
     }
   </style>`;
 
@@ -1024,10 +1038,10 @@ function renderBracket(data){
   const champion = finalData?.isDone ? finalData.winner : null;
 
   html += `<div class="bkx-grid">
-    <div class="bkx-col">${leftR32.map(miniMatch).join('')}</div>
-    <div class="bkx-col">${leftR16.map(miniMatch).join('')}</div>
-    <div class="bkx-col">${leftQF.map(miniMatch).join('')}</div>
-    <div class="bkx-col">${leftSF.map(miniMatch).join('')}</div>
+    ${fixedCol(leftR32, 8)}
+    ${fixedCol(leftR16, 4)}
+    ${fixedCol(leftQF, 2)}
+    ${fixedCol(leftSF, 1)}
     <div class="bkx-center">
       <div class="bkx-final-box">
         <div class="bkx-final-label">Final</div>
@@ -1042,10 +1056,10 @@ function renderBracket(data){
         ${miniMatch(thirdData)}
       </div>
     </div>
-    <div class="bkx-col">${rightSF.map(miniMatch).join('')}</div>
-    <div class="bkx-col">${rightQF.map(miniMatch).join('')}</div>
-    <div class="bkx-col">${rightR16.map(miniMatch).join('')}</div>
-    <div class="bkx-col">${rightR32.map(miniMatch).join('')}</div>
+    ${fixedCol(rightSF, 1)}
+    ${fixedCol(rightQF, 2)}
+    ${fixedCol(rightR16, 4)}
+    ${fixedCol(rightR32, 8)}
   </div>`;
 
   html += `<div style="margin-top:2.5rem;margin-bottom:1rem;padding-top:1.5rem;border-top:1px solid var(--border2);">
