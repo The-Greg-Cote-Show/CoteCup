@@ -1178,8 +1178,8 @@ function renderBracket(data){
   // Scale the whole bracket (via CSS transform) so totalWidth fits the
   // panel without ever needing horizontal scroll -- this is the key fix
   // for "need the full field visible, no scroll."
-  html += `<div id="bkxCenterWrap">
-    <div id="bkxCanvasOuter" style="width:${totalWidth}px;height:${totalHeight}px;overflow:hidden;">
+  html += `<div id="bkxCenterWrap" style="display:flex;justify-content:center;">
+    <div id="bkxCanvasOuter" style="width:${totalWidth}px;height:${totalHeight}px;overflow:hidden;flex-shrink:0;">
       <div id="bkxScaleWrap" style="position:relative;width:${totalWidth}px;height:${totalHeight}px;transform-origin:top left;">
         <svg width="${totalWidth}" height="${totalHeight}" style="position:absolute;top:0;left:0;">${svgPaths}</svg>
         ${labelsHtml}
@@ -1255,22 +1255,17 @@ function fitBracket(){
   const totalWidth = wrap.offsetWidth;   // unscaled -- transform doesn't change offsetWidth
   const totalHeight = wrap.offsetHeight;
   function fit(){
-    // Measure against centerWrap's own true rendered box (getBoundingClientRect
-    // reflects final layout directly) rather than trusting a clientWidth read
-    // through a chain of ancestors, which proved unreliable for this case.
+    // centerWrap is display:flex;justify-content:center -- the browser's
+    // flex layout engine centers outer natively based on its current width,
+    // regardless of how that width changes below. No JS-computed margin is
+    // needed; this removes an entire category of "did I get the pixel math
+    // right" risk that two previous attempts (margin:auto, then an explicit
+    // calculated margin-left) both ran into.
     const avail = centerWrap.getBoundingClientRect().width;
     const scale = Math.min(1, avail / totalWidth);
-    const scaledWidth = totalWidth * scale;
-    const scaledHeight = totalHeight * scale;
+    outer.style.width = (totalWidth * scale) + 'px';
+    outer.style.height = (totalHeight * scale) + 'px';
     wrap.style.transform = 'scale(' + scale + ')';
-    outer.style.width = scaledWidth + 'px';
-    outer.style.height = scaledHeight + 'px';
-    // Force centering with an explicitly calculated margin instead of relying
-    // on text-align:center alone -- this guarantees the result regardless of
-    // any container-chain quirk, since it's computed directly from real
-    // measured pixels rather than depending on CSS resolving it correctly.
-    const leftOffset = Math.max(0, (avail - scaledWidth) / 2);
-    outer.style.marginLeft = leftOffset + 'px';
   }
   fit();
   window.addEventListener('resize', fit);
