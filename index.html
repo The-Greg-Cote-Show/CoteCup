@@ -930,7 +930,17 @@ function renderBracket(data){
       const h=norm(f.homeTeam?.name||''), a=norm(f.awayTeam?.name||'');
       return (h===teamA && a===teamB) || (h===teamB && a===teamA);
     });
-    return found ? matchCardData(found) : null;
+    if(found) return matchCardData(found);
+    // The real fixture for this matchup doesn't exist in the API yet --
+    // the OTHER feeder match hasn't been played -- but we already know one
+    // team has advanced. Show them now in a "vs TBD" slot rather than
+    // leaving the whole box blank until both sides are known.
+    return {
+      home: teamA || null, away: teamB || null,
+      homeCrest: null, awayCrest: null,
+      hg: null, ag: null, isDone: false, isLive: false,
+      winner: null, utcDate: null, penalties: false, partial: true,
+    };
   }
 
   // R16/QF/SF feeds are now simply "pairs of adjacent boxes in display order"
@@ -963,7 +973,7 @@ function renderBracket(data){
   const thirdData = byStage.third.length ? matchCardData(byStage.third[0]) : null;
 
   function miniMatch(d, scale){
-    if(!d || !d.home || !d.away){
+    if(!d || (!d.home && !d.away)){
       return `<div class="bkx-match bkx-empty"></div>`;
     }
     const hd=getDrafter(d.home), ad=getDrafter(d.away);
@@ -972,19 +982,25 @@ function renderBracket(data){
     const aScore = d.isDone||d.isLive ? (d.ag??'') : '';
     const hAvatar = hd ? `<img class="bkx-avatar" src="${AVATARS[hd]}" alt="${hd}" title="${hd}">` : '';
     const aAvatar = ad ? `<img class="bkx-avatar" src="${AVATARS[ad]}" alt="${ad}" title="${ad}">` : '';
-    return `<div class="bkx-match ${d.isLive?'bkx-live-match':''}">
-      <div class="bkx-row ${homeWin?'bkx-win':''}">
-        ${teamImg(d.home,d.homeCrest,"1.5rem")}
-        <span class="bkx-name">${d.home}</span>
-        ${hAvatar}
-        <span class="bkx-s">${hScore}</span>
-      </div>
-      <div class="bkx-row ${awayWin?'bkx-win':''}">
-        ${teamImg(d.away,d.awayCrest,"1.5rem")}
-        <span class="bkx-name">${d.away}</span>
-        ${aAvatar}
-        <span class="bkx-s">${aScore}</span>
-      </div>
+    const homeRow = d.home
+      ? `<div class="bkx-row ${homeWin?'bkx-win':''}">
+          ${teamImg(d.home,d.homeCrest,"1.5rem")}
+          <span class="bkx-name">${d.home}</span>
+          ${hAvatar}
+          <span class="bkx-s">${hScore}</span>
+        </div>`
+      : `<div class="bkx-row bkx-tbd"><span class="bkx-name">TBD</span></div>`;
+    const awayRow = d.away
+      ? `<div class="bkx-row ${awayWin?'bkx-win':''}">
+          ${teamImg(d.away,d.awayCrest,"1.5rem")}
+          <span class="bkx-name">${d.away}</span>
+          ${aAvatar}
+          <span class="bkx-s">${aScore}</span>
+        </div>`
+      : `<div class="bkx-row bkx-tbd"><span class="bkx-name">TBD</span></div>`;
+    return `<div class="bkx-match ${d.isLive?'bkx-live-match':''} ${d.partial?'bkx-partial':''}">
+      ${homeRow}
+      ${awayRow}
     </div>`;
   }
 
@@ -996,9 +1012,10 @@ function renderBracket(data){
   const CARD_H = 68, CARD_W = 178, V_GAP = 16, COL_W = 210;
   const NUM_COLS_PER_SIDE = 4; // R32, R16, QF, SF
   const CENTER_W = 210;
+  const LABEL_H = 30; // reserved header band for round-name labels
 
   const r32Centers = [];
-  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+V_GAP) + CARD_H/2); }
+  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+V_GAP) + CARD_H/2 + LABEL_H); }
   const r16Centers = [0,1,2,3].map(i => (r32Centers[i*2]+r32Centers[i*2+1])/2);
   const qfCenters  = [0,1].map(i => (r16Centers[i*2]+r16Centers[i*2+1])/2);
   const sfCenter   = (qfCenters[0]+qfCenters[1])/2;
@@ -1082,6 +1099,17 @@ function renderBracket(data){
   const champion = finalData?.isDone ? finalData.winner : null;
 
   let boxes = '';
+  function colLabel(text, x){
+    return `<div style="position:absolute;left:${x}px;top:6px;width:${CARD_W}px;text-align:center;font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);">${text}</div>`;
+  }
+  let labelsHtml = '';
+  labelsHtml += colLabel('Quarterfinal Round', colX.leftR16);
+  labelsHtml += colLabel('Semifinal Round', colX.leftQF);
+  labelsHtml += colLabel('Final Round', colX.leftSF);
+  labelsHtml += colLabel('Final Round', colX.rightSF);
+  labelsHtml += colLabel('Semifinal Round', colX.rightQF);
+  labelsHtml += colLabel('Quarterfinal Round', colX.rightR16);
+
   boxes += boxesHtml(leftR32, r32Centers, colX.leftR32);
   boxes += boxesHtml(leftR16, r16Centers, colX.leftR16);
   boxes += boxesHtml(leftQF, qfCenters, colX.leftQF);
@@ -1130,6 +1158,8 @@ function renderBracket(data){
     .bkx-s{font-size:.78rem;font-weight:700;min-width:16px;text-align:right;color:var(--muted);}
     .bkx-win .bkx-s{color:var(--gold);}
     .bkx-live-match{border-color:var(--red);}
+    .bkx-tbd .bkx-name{color:var(--muted);font-style:italic;opacity:.6;}
+    .bkx-partial{border-style:dashed;}
     .bkx-final-box{background:var(--panel3);border:1px solid var(--gold);border-radius:10px;padding:.5rem .6rem;}
     .bkx-final-label{font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:4px;}
     .bkx-champion-box{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--gold2);border-radius:10px;padding:.6rem;text-align:center;}
@@ -1146,9 +1176,10 @@ function renderBracket(data){
   // Scale the whole bracket (via CSS transform) so totalWidth fits the
   // panel without ever needing horizontal scroll -- this is the key fix
   // for "need the full field visible, no scroll."
-  html += `<div class="bkx-canvas" style="height:${totalHeight}px;">
-    <div id="bkxScaleWrap" style="position:absolute;top:0;left:0;width:${totalWidth}px;height:${totalHeight}px;transform-origin:top left;">
+  html += `<div id="bkxCanvasOuter" style="width:${totalWidth}px;height:${totalHeight}px;margin:0 auto;overflow:hidden;">
+    <div id="bkxScaleWrap" style="position:relative;width:${totalWidth}px;height:${totalHeight}px;transform-origin:top left;">
       <svg width="${totalWidth}" height="${totalHeight}" style="position:absolute;top:0;left:0;">${svgPaths}</svg>
+      ${labelsHtml}
       ${boxes}
       ${centerHtml}
     </div>
@@ -1198,15 +1229,20 @@ function renderBracket(data){
 // into plain rendered text on the page. This caused the full-site outage.
 function fitBracket(){
   const wrap = document.getElementById('bkxScaleWrap');
-  if(!wrap) return;
-  const canvas = wrap.parentElement;
-  const totalWidth = wrap.offsetWidth;
+  const outer = document.getElementById('bkxCanvasOuter');
+  if(!wrap || !outer) return;
+  const totalWidth = wrap.offsetWidth;   // unscaled -- transform doesn't change offsetWidth
   const totalHeight = wrap.offsetHeight;
   function fit(){
-    const avail = canvas.parentElement.clientWidth;
+    const avail = outer.parentElement.clientWidth;
     const scale = Math.min(1, avail / totalWidth);
     wrap.style.transform = 'scale(' + scale + ')';
-    canvas.style.height = (totalHeight * scale) + 'px';
+    // Resize the OUTER box to the true visual (scaled) footprint so
+    // margin:0 auto actually centers it -- CSS transform never changes an
+    // element's own layout size, only its rendering, so without this the
+    // bracket stays pinned to whatever edge it started at.
+    outer.style.width = (totalWidth * scale) + 'px';
+    outer.style.height = (totalHeight * scale) + 'px';
   }
   fit();
   window.addEventListener('resize', fit);
@@ -1222,6 +1258,24 @@ function renderStandingsChart(completed){
   const pts = {Yeti:0, Chris:0, Greg:0};
   const history = [{label:'Start', Yeti:0, Chris:0, Greg:0}, {label:'', Yeti:0, Chris:0, Greg:0, gap:true}];
 
+  // Group stage (June 11-27) gets 3-day x-axis label buckets to reduce
+  // crowding from ~70 matches across 17 days; round of 32 onward (June 28+)
+  // keeps individual daily labels since there's far less density per day.
+  // This only changes the LABEL text -- every match still gets its own
+  // plotted point on the line, so no detail is lost.
+  function bucketLabel(date){
+    const y = date.getFullYear(), m = date.getMonth(), day = date.getDate();
+    const isGroupWindow = (y===2026 && m===5 && day>=11 && day<=27); // June = month 5
+    if(!isGroupWindow){
+      return date.toLocaleDateString([],{month:'short',day:'numeric'});
+    }
+    const offset = day - 11;
+    const bucketStart = 11 + Math.floor(offset/3)*3;
+    const bucketEnd = Math.min(bucketStart+2, 27);
+    const mStr = date.toLocaleDateString([],{month:'short'});
+    return bucketStart===bucketEnd ? `${mStr} ${bucketStart}` : `${mStr} ${bucketStart}-${bucketEnd}`;
+  }
+
   sorted.forEach(f=>{
     const h=norm(f.homeTeam?.name||''), a=norm(f.awayTeam?.name||'');
     const hg=f.score?.fullTime?.home??0, ag=f.score?.fullTime?.away??0;
@@ -1230,7 +1284,7 @@ function renderStandingsChart(completed){
     const homeWin=hg>ag, awayWin=ag>hg, isDraw=hg===ag;
     if(hd){ pts[hd]+= hg + (isKO?(homeWin?5:0):(homeWin?3:isDraw?1:0)); }
     if(ad){ pts[ad]+= ag + (isKO?(awayWin?5:0):(awayWin?3:isDraw?1:0)); }
-    const d=new Date(f.utcDate).toLocaleDateString([],{month:'short',day:'numeric'});
+    const d=bucketLabel(new Date(f.utcDate));
     history.push({label:d,...pts});
   });
 
