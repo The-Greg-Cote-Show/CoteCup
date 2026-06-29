@@ -1012,10 +1012,9 @@ function renderBracket(data){
   const CARD_H = 68, CARD_W = 178, V_GAP = 16, COL_W = 210;
   const NUM_COLS_PER_SIDE = 4; // R32, R16, QF, SF
   const CENTER_W = 210;
-  const LABEL_H = 30; // reserved header band for round-name labels
 
   const r32Centers = [];
-  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+V_GAP) + CARD_H/2 + LABEL_H); }
+  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+V_GAP) + CARD_H/2); }
   const r16Centers = [0,1,2,3].map(i => (r32Centers[i*2]+r32Centers[i*2+1])/2);
   const qfCenters  = [0,1].map(i => (r16Centers[i*2]+r16Centers[i*2+1])/2);
   const sfCenter   = (qfCenters[0]+qfCenters[1])/2;
@@ -1079,11 +1078,18 @@ function renderBracket(data){
     return `<path d="M${xFrom},${y} H${xTo}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
   }
 
-  // Center box geometry -- computed once and reused for both the connector
-  // endpoints and the box HTML itself, so the line always meets the box
-  // exactly instead of two separately-guessed numbers drifting apart.
+  // Center box geometry -- computed directly from where the left bracket's
+  // boxes actually end and the right bracket's boxes actually begin, so the
+  // gap is provably split evenly. The earlier version computed this offset
+  // from colX.center instead of the true box edges, which silently assumed
+  // COL_W and CARD_W were equal (they aren't -- COL_W=210, CARD_W=178),
+  // producing a 32px rightward drift (48px gap on the left, 16px on the
+  // right) that read as the box "sitting closer to the right bracket."
+  const gapLeftEdge = colX.leftSF + CARD_W;
+  const gapRightEdge = colX.rightSF;
+  const gapWidth = gapRightEdge - gapLeftEdge;
   const centerBoxW = CARD_W;
-  const centerBoxLeft = colX.center + (CENTER_W - centerBoxW) / 2;
+  const centerBoxLeft = gapLeftEdge + (gapWidth - centerBoxW) / 2;
   const centerBoxRight = centerBoxLeft + centerBoxW;
 
   let svgPaths = '';
@@ -1099,16 +1105,18 @@ function renderBracket(data){
   const champion = finalData?.isDone ? finalData.winner : null;
 
   let boxes = '';
-  function colLabel(text, x){
-    return `<div style="position:absolute;left:${x}px;top:6px;width:${CARD_W}px;text-align:center;font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);">${text}</div>`;
+  const LABEL_GAP = 6, LABEL_BLOCK_H = 16; // space reserved above each box for its label
+  function colLabel(text, x, firstBoxTop){
+    const labelTop = firstBoxTop - LABEL_GAP - LABEL_BLOCK_H;
+    return `<div style="position:absolute;left:${x}px;top:${labelTop}px;width:${CARD_W}px;text-align:center;font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);">${text}</div>`;
   }
   let labelsHtml = '';
-  labelsHtml += colLabel('Quarterfinal Round', colX.leftR16);
-  labelsHtml += colLabel('Semifinal Round', colX.leftQF);
-  labelsHtml += colLabel('Final Round', colX.leftSF);
-  labelsHtml += colLabel('Final Round', colX.rightSF);
-  labelsHtml += colLabel('Semifinal Round', colX.rightQF);
-  labelsHtml += colLabel('Quarterfinal Round', colX.rightR16);
+  labelsHtml += colLabel('Quarterfinal Round', colX.leftR16, r16Centers[0]-CARD_H/2);
+  labelsHtml += colLabel('Semifinal Round', colX.leftQF, qfCenters[0]-CARD_H/2);
+  labelsHtml += colLabel('Final Round', colX.leftSF, sfCenter-CARD_H/2);
+  labelsHtml += colLabel('Final Round', colX.rightSF, sfCenter-CARD_H/2);
+  labelsHtml += colLabel('Semifinal Round', colX.rightQF, qfCenters[0]-CARD_H/2);
+  labelsHtml += colLabel('Quarterfinal Round', colX.rightR16, r16Centers[0]-CARD_H/2);
 
   boxes += boxesHtml(leftR32, r32Centers, colX.leftR32);
   boxes += boxesHtml(leftR16, r16Centers, colX.leftR16);
@@ -1119,28 +1127,23 @@ function renderBracket(data){
   boxes += boxesHtml(rightR16, r16Centers, colX.rightR16);
   boxes += boxesHtml(rightR32, r32Centers, colX.rightR32);
 
-  // Champion box's vertical center is pinned to sfCenter -- the exact
-  // height the connector lines converge at -- so it reads as the true
-  // center of the bracket, matching the broadcast-style layout. The Final
-  // match box sits above it, 3rd Place below.
-  const finalBoxH = 86, championBoxH = 78, thirdBoxH = 86, stackGap = 22;
+  // Champion's box gets a placeholder top here; the EXACT vertical center
+  // is corrected right after render using its real measured height (see
+  // below), since text wrapping/padding can shift the true rendered height
+  // slightly from any static guess -- a guess was the reason it still read
+  // as "a little high" after the previous attempt.
+  const championBoxH = 78, thirdBoxH = 86, stackGap = 22;
   const championTop = sfCenter - championBoxH/2;
-  const finalTop = championTop - stackGap - finalBoxH;
   const thirdTop = championTop + championBoxH + stackGap;
 
   const centerHtml = `
-    <div style="position:absolute;left:${centerBoxLeft}px;top:${finalTop}px;width:${centerBoxW}px;">
-      <div class="bkx-final-box">
-        ${miniMatch(finalData)}
-      </div>
-    </div>
-    <div style="position:absolute;left:${centerBoxLeft}px;top:${championTop}px;width:${centerBoxW}px;">
+    <div id="bkxChampionBox" style="position:absolute;left:${centerBoxLeft}px;top:${championTop}px;width:${centerBoxW}px;">
       <div class="bkx-champion-box">
         <div class="bkx-champion-label">Champion</div>
         <div class="bkx-champion-name">${champion||'\u2014'}</div>
       </div>
     </div>
-    <div style="position:absolute;left:${centerBoxLeft}px;top:${thirdTop}px;width:${centerBoxW}px;">
+    <div id="bkxThirdBox" style="position:absolute;left:${centerBoxLeft}px;top:${thirdTop}px;width:${centerBoxW}px;">
       <div class="bkx-final-box">
         <div class="bkx-final-label">3rd Place</div>
         ${miniMatch(thirdData)}
@@ -1216,6 +1219,22 @@ function renderBracket(data){
   html += '</div>';
 
   el.innerHTML = html;
+
+  // Re-align Champion using its ACTUAL rendered height rather than the
+  // static guess used above -- text wrapping, padding, and font rendering
+  // can all shift the true height slightly, and this is the difference
+  // between "looks close" and being provably centered on the connectors.
+  const champEl = document.getElementById('bkxChampionBox');
+  const thirdEl = document.getElementById('bkxThirdBox');
+  if(champEl){
+    const realChampH = champEl.offsetHeight;
+    const correctedTop = sfCenter - realChampH/2;
+    champEl.style.top = correctedTop + 'px';
+    if(thirdEl){
+      thirdEl.style.top = (correctedTop + realChampH + stackGap) + 'px';
+    }
+  }
+
   fitBracket();
 }
 
@@ -1262,17 +1281,20 @@ function renderStandingsChart(completed){
   // keeps individual daily labels since there's far less density per day.
   // This only changes the LABEL text -- every match still gets its own
   // plotted point on the line, so no detail is lost.
+  // Group stage (June 11-27) gets three bigger x-axis label buckets to
+  // reduce crowding from ~70 matches across 17 days; round of 32 onward
+  // (June 28+) keeps individual daily labels since there's far less density
+  // per day. This only changes the LABEL text -- every match still gets its
+  // own plotted point on the line, so no detail is lost.
   function bucketLabel(date){
     const y = date.getFullYear(), m = date.getMonth(), day = date.getDate();
-    const isGroupWindow = (y===2026 && m===5 && day>=11 && day<=27); // June = month 5
-    if(!isGroupWindow){
-      return date.toLocaleDateString([],{month:'short',day:'numeric'});
-    }
-    const offset = day - 11;
-    const bucketStart = 11 + Math.floor(offset/3)*3;
-    const bucketEnd = Math.min(bucketStart+2, 27);
     const mStr = date.toLocaleDateString([],{month:'short'});
-    return bucketStart===bucketEnd ? `${mStr} ${bucketStart}` : `${mStr} ${bucketStart}-${bucketEnd}`;
+    if(y===2026 && m===5){ // June
+      if(day>=11 && day<=16) return `${mStr} 11-16`;
+      if(day>=17 && day<=22) return `${mStr} 17-22`;
+      if(day>=23 && day<=27) return `${mStr} 23-27`;
+    }
+    return date.toLocaleDateString([],{month:'short',day:'numeric'});
   }
 
   sorted.forEach(f=>{
