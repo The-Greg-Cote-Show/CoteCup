@@ -1178,8 +1178,8 @@ function renderBracket(data){
   // Scale the whole bracket (via CSS transform) so totalWidth fits the
   // panel without ever needing horizontal scroll -- this is the key fix
   // for "need the full field visible, no scroll."
-  html += `<div id="bkxCenterWrap" style="text-align:center;">
-    <div id="bkxCanvasOuter" style="display:inline-block;width:${totalWidth}px;height:${totalHeight}px;overflow:hidden;">
+  html += `<div id="bkxCenterWrap">
+    <div id="bkxCanvasOuter" style="width:${totalWidth}px;height:${totalHeight}px;overflow:hidden;">
       <div id="bkxScaleWrap" style="position:relative;width:${totalWidth}px;height:${totalHeight}px;transform-origin:top left;">
         <svg width="${totalWidth}" height="${totalHeight}" style="position:absolute;top:0;left:0;">${svgPaths}</svg>
         ${labelsHtml}
@@ -1250,21 +1250,27 @@ function renderBracket(data){
 function fitBracket(){
   const wrap = document.getElementById('bkxScaleWrap');
   const outer = document.getElementById('bkxCanvasOuter');
-  if(!wrap || !outer) return;
+  const centerWrap = document.getElementById('bkxCenterWrap');
+  if(!wrap || !outer || !centerWrap) return;
   const totalWidth = wrap.offsetWidth;   // unscaled -- transform doesn't change offsetWidth
   const totalHeight = wrap.offsetHeight;
   function fit(){
-    const avail = outer.parentElement.clientWidth;
+    // Measure against centerWrap's own true rendered box (getBoundingClientRect
+    // reflects final layout directly) rather than trusting a clientWidth read
+    // through a chain of ancestors, which proved unreliable for this case.
+    const avail = centerWrap.getBoundingClientRect().width;
     const scale = Math.min(1, avail / totalWidth);
+    const scaledWidth = totalWidth * scale;
+    const scaledHeight = totalHeight * scale;
     wrap.style.transform = 'scale(' + scale + ')';
-    // Resize the OUTER box to the true visual (scaled) footprint. The
-    // parent (#bkxCenterWrap) uses text-align:center + outer is
-    // display:inline-block, which centers reliably regardless of how the
-    // scaled width compares to the available space -- margin:0 auto on a
-    // JS-resized block element was unreliable here and left the bracket
-    // pinned to the left edge instead of centering.
-    outer.style.width = (totalWidth * scale) + 'px';
-    outer.style.height = (totalHeight * scale) + 'px';
+    outer.style.width = scaledWidth + 'px';
+    outer.style.height = scaledHeight + 'px';
+    // Force centering with an explicitly calculated margin instead of relying
+    // on text-align:center alone -- this guarantees the result regardless of
+    // any container-chain quirk, since it's computed directly from real
+    // measured pixels rather than depending on CSS resolving it correctly.
+    const leftOffset = Math.max(0, (avail - scaledWidth) / 2);
+    outer.style.marginLeft = leftOffset + 'px';
   }
   fit();
   window.addEventListener('resize', fit);
