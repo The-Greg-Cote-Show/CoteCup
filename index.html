@@ -1119,19 +1119,18 @@ function renderBracket(data){
   boxes += boxesHtml(rightR16, r16Centers, colX.rightR16);
   boxes += boxesHtml(rightR32, r32Centers, colX.rightR32);
 
-  // Final box's vertical center is pinned to sfCenter -- the exact height
-  // the connector lines arrive at -- so the line and the box always agree.
-  // Estimated box heights below match the CSS padding/font-size for each
-  // box type; Champion stacks below Final, 3rd Place below that.
+  // Champion box's vertical center is pinned to sfCenter -- the exact
+  // height the connector lines converge at -- so it reads as the true
+  // center of the bracket, matching the broadcast-style layout. The Final
+  // match box sits above it, 3rd Place below.
   const finalBoxH = 86, championBoxH = 78, thirdBoxH = 86, stackGap = 22;
-  const finalTop = sfCenter - finalBoxH/2;
-  const championTop = finalTop + finalBoxH + stackGap;
+  const championTop = sfCenter - championBoxH/2;
+  const finalTop = championTop - stackGap - finalBoxH;
   const thirdTop = championTop + championBoxH + stackGap;
 
   const centerHtml = `
     <div style="position:absolute;left:${centerBoxLeft}px;top:${finalTop}px;width:${centerBoxW}px;">
       <div class="bkx-final-box">
-        <div class="bkx-final-label">Final</div>
         ${miniMatch(finalData)}
       </div>
     </div>
@@ -1308,6 +1307,7 @@ function renderStandingsChart(completed){
   };
 
   const xLabels=history.map((p,i)=>{
+    if(p.label==='Start') return ''; // line already starts at 0 visually; the text collided with the first real label
     if(i>0 && p.label===history[i-1].label) return '';
     return `<text x="${PAD.l+i*xStep}" y="${H-8}" text-anchor="middle" font-size="9" fill="#7a8ba8">${p.label}</text>`;
   }).join('');
