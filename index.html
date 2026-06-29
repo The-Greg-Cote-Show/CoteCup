@@ -984,7 +984,7 @@ function renderBracket(data){
     const aAvatar = ad ? `<img class="bkx-avatar" src="${AVATARS[ad]}" alt="${ad}" title="${ad}">` : '';
     const homeRow = d.home
       ? `<div class="bkx-row ${homeWin?'bkx-win':''}">
-          ${teamImg(d.home,d.homeCrest,"1.5rem")}
+          ${teamImg(d.home,d.homeCrest,"1.9rem")}
           <span class="bkx-name">${d.home}</span>
           ${hAvatar}
           <span class="bkx-s">${hScore}</span>
@@ -992,7 +992,7 @@ function renderBracket(data){
       : `<div class="bkx-row bkx-tbd"><span class="bkx-name">TBD</span></div>`;
     const awayRow = d.away
       ? `<div class="bkx-row ${awayWin?'bkx-win':''}">
-          ${teamImg(d.away,d.awayCrest,"1.5rem")}
+          ${teamImg(d.away,d.awayCrest,"1.9rem")}
           <span class="bkx-name">${d.away}</span>
           ${aAvatar}
           <span class="bkx-s">${aScore}</span>
@@ -1009,9 +1009,9 @@ function renderBracket(data){
   // absolutely-positioned elements inside ONE container, using one shared
   // pixel coordinate system. This avoids any flex/absolute mixing issues that
   // caused columns to overlap previously.
-  const CARD_H = 68, CARD_W = 178, V_GAP = 16, COL_W = 210;
+  const CARD_H = 90, CARD_W = 210, V_GAP = 20, COL_W = 248;
   const NUM_COLS_PER_SIDE = 4; // R32, R16, QF, SF
-  const CENTER_W = 210;
+  const CENTER_W = 248;
 
   const r32Centers = [];
   for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+V_GAP) + CARD_H/2); }
@@ -1105,10 +1105,10 @@ function renderBracket(data){
   const champion = finalData?.isDone ? finalData.winner : null;
 
   let boxes = '';
-  const LABEL_GAP = 6, LABEL_BLOCK_H = 16; // space reserved above each box for its label
+  const LABEL_GAP = 7, LABEL_BLOCK_H = 19; // space reserved above each box for its label
   function colLabel(text, x, firstBoxTop){
     const labelTop = firstBoxTop - LABEL_GAP - LABEL_BLOCK_H;
-    return `<div style="position:absolute;left:${x}px;top:${labelTop}px;width:${CARD_W}px;text-align:center;font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);">${text}</div>`;
+    return `<div style="position:absolute;left:${x}px;top:${labelTop}px;width:${CARD_W}px;text-align:center;font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);">${text}</div>`;
   }
   let labelsHtml = '';
   labelsHtml += colLabel('Quarterfinal Round', colX.leftR16, r16Centers[0]-CARD_H/2);
@@ -1132,7 +1132,7 @@ function renderBracket(data){
   // below), since text wrapping/padding can shift the true rendered height
   // slightly from any static guess -- a guess was the reason it still read
   // as "a little high" after the previous attempt.
-  const championBoxH = 78, thirdBoxH = 86, stackGap = 22;
+  const championBoxH = 100, thirdBoxH = 108, stackGap = 26;
   const championTop = sfCenter - championBoxH/2;
   const thirdTop = championTop + championBoxH + stackGap;
 
@@ -1151,22 +1151,22 @@ function renderBracket(data){
     </div>`;
 
   let html = `<style>
-    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:.78rem;display:flex;flex-direction:column;gap:3px;width:100%;height:100%;justify-content:center;box-sizing:border-box;}
+    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:8px 12px;font-size:.95rem;display:flex;flex-direction:column;gap:5px;width:100%;height:100%;justify-content:center;box-sizing:border-box;}
     .bkx-empty{background:var(--panel2);opacity:.3;}
     .bkx-row{display:flex;align-items:center;gap:4px;padding:1px 0;}
     .bkx-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);}
     .bkx-win .bkx-name{color:var(--text);font-weight:700;}
-    .bkx-avatar{width:20px;height:20px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border2);}
-    .bkx-s{font-size:.78rem;font-weight:700;min-width:16px;text-align:right;color:var(--muted);}
+    .bkx-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border2);}
+    .bkx-s{font-size:.95rem;font-weight:700;min-width:20px;text-align:right;color:var(--muted);}
     .bkx-win .bkx-s{color:var(--gold);}
     .bkx-live-match{border-color:var(--red);}
     .bkx-tbd .bkx-name{color:var(--muted);font-style:italic;opacity:.6;}
     .bkx-partial{border-style:dashed;}
     .bkx-final-box{background:var(--panel3);border:1px solid var(--gold);border-radius:10px;padding:.5rem .6rem;}
-    .bkx-final-label{font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:4px;}
+    .bkx-final-label{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:5px;}
     .bkx-champion-box{background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid var(--gold2);border-radius:10px;padding:.6rem;text-align:center;}
-    .bkx-champion-label{font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
-    .bkx-champion-name{font-size:.9rem;font-weight:900;color:var(--gold2);margin-top:4px;min-height:1.1em;}
+    .bkx-champion-label{font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+    .bkx-champion-name{font-size:1.1rem;font-weight:900;color:var(--gold2);margin-top:5px;min-height:1.3em;}
     .bkx-canvas{position:relative;width:100%;}
   </style>`;
 
