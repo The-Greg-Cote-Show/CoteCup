@@ -441,7 +441,15 @@ function teamImg(teamName, crestUrl, size){
   const n = norm(teamName);
   const code = FLAGS[n];
   const sz = size||"2rem";
-  const h = sz === "20px" ? "15px" : (sz === "1.5rem" ? "1.1rem" : (sz === "1.4rem" ? "1.05rem" : "1.5rem"));
+  // Flags are landscape (~3:2). Compute height as a fixed ratio of whatever
+  // width was passed, instead of a lookup table that silently falls back to
+  // a portrait ratio for any size string it doesn't explicitly recognize.
+  const m = String(sz).match(/^([\d.]+)(rem|px|em)$/);
+  let h = sz;
+  if(m){
+    const num = Math.round(parseFloat(m[1]) * 0.72 * 100) / 100;
+    h = num + m[2];
+  }
   if(code){
     return `<span class="fi fi-${code}" style="width:${sz};height:${h};border-radius:2px;display:inline-block;background-size:cover;"></span>`;
   }
@@ -731,6 +739,8 @@ function renderBreakdown(teamPts){
   }).join("");
 }
 
+let currentView = 'main';
+
 function showView(view){
   const main    = document.querySelector('.dashboard');
   const hist    = document.getElementById('historyView');
@@ -739,6 +749,7 @@ function showView(view){
   main.style.display='none';
   hist.style.display='none';
   bracket.style.display='none';
+  currentView = view;
   if(view==='history'){
     hist.style.display='block';
     document.getElementById('navHistory').classList.add('active');
@@ -963,13 +974,13 @@ function renderBracket(data){
     const aAvatar = ad ? `<img class="bkx-avatar" src="${AVATARS[ad]}" alt="${ad}" title="${ad}">` : '';
     return `<div class="bkx-match ${d.isLive?'bkx-live-match':''}">
       <div class="bkx-row ${homeWin?'bkx-win':''}">
-        ${teamImg(d.home,d.homeCrest,"1.1rem")}
+        ${teamImg(d.home,d.homeCrest,"1.5rem")}
         <span class="bkx-name">${d.home}</span>
         ${hAvatar}
         <span class="bkx-s">${hScore}</span>
       </div>
       <div class="bkx-row ${awayWin?'bkx-win':''}">
-        ${teamImg(d.away,d.awayCrest,"1.1rem")}
+        ${teamImg(d.away,d.awayCrest,"1.5rem")}
         <span class="bkx-name">${d.away}</span>
         ${aAvatar}
         <span class="bkx-s">${aScore}</span>
@@ -982,9 +993,9 @@ function renderBracket(data){
   // absolutely-positioned elements inside ONE container, using one shared
   // pixel coordinate system. This avoids any flex/absolute mixing issues that
   // caused columns to overlap previously.
-  const CARD_H = 46, CARD_W = 168, V_GAP = 10, COL_W = 200;
+  const CARD_H = 68, CARD_W = 178, V_GAP = 16, COL_W = 210;
   const NUM_COLS_PER_SIDE = 4; // R32, R16, QF, SF
-  const CENTER_W = 200;
+  const CENTER_W = 210;
 
   const r32Centers = [];
   for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+V_GAP) + CARD_H/2); }
@@ -1039,15 +1050,34 @@ function renderBracket(data){
     return paths;
   }
 
+  // Single straight connector for SF -> Final, since there's exactly one box
+  // on each side feeding one Final box, not a pair to bracket together. The
+  // paired connector functions above produce NaN math if given a single
+  // center (yB comes back undefined), which is why this needs its own path.
+  function connectorSingle(y, xFrom, xTo){
+    const xRight = xFrom + CARD_W;
+    return `<path d="M${xRight},${y} H${xTo}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
+  }
+  function connectorSingleRev(y, xFrom, xTo){
+    return `<path d="M${xFrom},${y} H${xTo}" stroke="var(--border2)" stroke-width="1.5" fill="none"/>`;
+  }
+
+  // Center box geometry -- computed once and reused for both the connector
+  // endpoints and the box HTML itself, so the line always meets the box
+  // exactly instead of two separately-guessed numbers drifting apart.
+  const centerBoxW = CARD_W;
+  const centerBoxLeft = colX.center + (CENTER_W - centerBoxW) / 2;
+  const centerBoxRight = centerBoxLeft + centerBoxW;
+
   let svgPaths = '';
   svgPaths += connectors(r32Centers, colX.leftR32, colX.leftR16);
   svgPaths += connectors(r16Centers, colX.leftR16, colX.leftQF);
   svgPaths += connectors(qfCenters, colX.leftQF, colX.leftSF);
-  svgPaths += connectors([sfCenter], colX.leftSF, colX.center); // SF -> center final (single line)
+  svgPaths += connectorSingle(sfCenter, colX.leftSF, centerBoxLeft);
   svgPaths += connectorsRev(r32Centers, colX.rightR32, colX.rightR16);
   svgPaths += connectorsRev(r16Centers, colX.rightR16, colX.rightQF);
   svgPaths += connectorsRev(qfCenters, colX.rightQF, colX.rightSF);
-  svgPaths += connectorsRev([sfCenter], colX.rightSF, colX.center);
+  svgPaths += connectorSingleRev(sfCenter, colX.rightSF, centerBoxRight);
 
   const champion = finalData?.isDone ? finalData.winner : null;
 
@@ -1061,21 +1091,29 @@ function renderBracket(data){
   boxes += boxesHtml(rightR16, r16Centers, colX.rightR16);
   boxes += boxesHtml(rightR32, r32Centers, colX.rightR32);
 
-  const centerTop = totalHeight/2 - 150;
+  // Final box's vertical center is pinned to sfCenter -- the exact height
+  // the connector lines arrive at -- so the line and the box always agree.
+  // Estimated box heights below match the CSS padding/font-size for each
+  // box type; Champion stacks below Final, 3rd Place below that.
+  const finalBoxH = 86, championBoxH = 78, thirdBoxH = 86, stackGap = 22;
+  const finalTop = sfCenter - finalBoxH/2;
+  const championTop = finalTop + finalBoxH + stackGap;
+  const thirdTop = championTop + championBoxH + stackGap;
+
   const centerHtml = `
-    <div style="position:absolute;left:${colX.center}px;top:${centerTop}px;width:${CENTER_W-20}px;">
+    <div style="position:absolute;left:${centerBoxLeft}px;top:${finalTop}px;width:${centerBoxW}px;">
       <div class="bkx-final-box">
         <div class="bkx-final-label">Final</div>
         ${miniMatch(finalData)}
       </div>
     </div>
-    <div style="position:absolute;left:${colX.center}px;top:${centerTop+110}px;width:${CENTER_W-20}px;">
+    <div style="position:absolute;left:${centerBoxLeft}px;top:${championTop}px;width:${centerBoxW}px;">
       <div class="bkx-champion-box">
         <div class="bkx-champion-label">Champion</div>
         <div class="bkx-champion-name">${champion||'\u2014'}</div>
       </div>
     </div>
-    <div style="position:absolute;left:${colX.center}px;top:${centerTop+220}px;width:${CENTER_W-20}px;">
+    <div style="position:absolute;left:${centerBoxLeft}px;top:${thirdTop}px;width:${centerBoxW}px;">
       <div class="bkx-final-box">
         <div class="bkx-final-label">3rd Place</div>
         ${miniMatch(thirdData)}
@@ -1083,13 +1121,13 @@ function renderBracket(data){
     </div>`;
 
   let html = `<style>
-    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:3px 7px;font-size:.66rem;display:flex;flex-direction:column;gap:1px;width:100%;height:100%;justify-content:center;box-sizing:border-box;}
+    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:.78rem;display:flex;flex-direction:column;gap:3px;width:100%;height:100%;justify-content:center;box-sizing:border-box;}
     .bkx-empty{background:var(--panel2);opacity:.3;}
     .bkx-row{display:flex;align-items:center;gap:4px;padding:1px 0;}
     .bkx-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);}
     .bkx-win .bkx-name{color:var(--text);font-weight:700;}
-    .bkx-avatar{width:16px;height:16px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border2);}
-    .bkx-s{font-size:.66rem;font-weight:700;min-width:13px;text-align:right;color:var(--muted);}
+    .bkx-avatar{width:20px;height:20px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border2);}
+    .bkx-s{font-size:.78rem;font-weight:700;min-width:16px;text-align:right;color:var(--muted);}
     .bkx-win .bkx-s{color:var(--gold);}
     .bkx-live-match{border-color:var(--red);}
     .bkx-final-box{background:var(--panel3);border:1px solid var(--gold);border-radius:10px;padding:.5rem .6rem;}
@@ -1273,6 +1311,15 @@ async function fetchData(){
 
     renderMatches(todayLocal, liveLocal, yesterdayLocal, tomorrowLocal);
     renderBreakdown(teamPts);
+
+    // The main dashboard re-renders above unconditionally, but Bracket and
+    // History are only built on-demand inside showView(). Without this, a
+    // background refresh updates window._lastData silently while you're
+    // sitting on the Bracket tab, and a finished match never appears as
+    // advanced until you manually switch tabs away and back.
+    if(currentView==='bracket') renderBracket(data);
+    else if(currentView==='history') renderHistory(data);
+
     const d=new Date(data.updated);
     document.getElementById("lastUpdated").textContent="Updated "+d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
   }catch(err){
