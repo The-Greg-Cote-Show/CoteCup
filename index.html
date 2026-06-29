@@ -1178,12 +1178,14 @@ function renderBracket(data){
   // Scale the whole bracket (via CSS transform) so totalWidth fits the
   // panel without ever needing horizontal scroll -- this is the key fix
   // for "need the full field visible, no scroll."
-  html += `<div id="bkxCanvasOuter" style="width:${totalWidth}px;height:${totalHeight}px;margin:0 auto;overflow:hidden;">
-    <div id="bkxScaleWrap" style="position:relative;width:${totalWidth}px;height:${totalHeight}px;transform-origin:top left;">
-      <svg width="${totalWidth}" height="${totalHeight}" style="position:absolute;top:0;left:0;">${svgPaths}</svg>
-      ${labelsHtml}
-      ${boxes}
-      ${centerHtml}
+  html += `<div id="bkxCenterWrap" style="text-align:center;">
+    <div id="bkxCanvasOuter" style="display:inline-block;width:${totalWidth}px;height:${totalHeight}px;overflow:hidden;">
+      <div id="bkxScaleWrap" style="position:relative;width:${totalWidth}px;height:${totalHeight}px;transform-origin:top left;">
+        <svg width="${totalWidth}" height="${totalHeight}" style="position:absolute;top:0;left:0;">${svgPaths}</svg>
+        ${labelsHtml}
+        ${boxes}
+        ${centerHtml}
+      </div>
     </div>
   </div>`;
 
@@ -1255,10 +1257,12 @@ function fitBracket(){
     const avail = outer.parentElement.clientWidth;
     const scale = Math.min(1, avail / totalWidth);
     wrap.style.transform = 'scale(' + scale + ')';
-    // Resize the OUTER box to the true visual (scaled) footprint so
-    // margin:0 auto actually centers it -- CSS transform never changes an
-    // element's own layout size, only its rendering, so without this the
-    // bracket stays pinned to whatever edge it started at.
+    // Resize the OUTER box to the true visual (scaled) footprint. The
+    // parent (#bkxCenterWrap) uses text-align:center + outer is
+    // display:inline-block, which centers reliably regardless of how the
+    // scaled width compares to the available space -- margin:0 auto on a
+    // JS-resized block element was unreliable here and left the bracket
+    // pinned to the left edge instead of centering.
     outer.style.width = (totalWidth * scale) + 'px';
     outer.style.height = (totalHeight * scale) + 'px';
   }
