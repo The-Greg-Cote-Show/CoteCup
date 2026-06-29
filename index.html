@@ -1172,26 +1172,22 @@ function renderBracket(data){
 
   html += `<div style="margin-bottom:1.25rem;">
     <div style="font-size:1.1rem;font-weight:700;margin-bottom:.25rem;">Knockout Bracket</div>
-    <div style="font-size:.8rem;color:var(--muted);">Auto-updates as results come in. Group stage is complete -- final standings below.</div>
   </div>`;
 
   // Scale the whole bracket (via CSS transform) so totalWidth fits the
   // panel without ever needing horizontal scroll -- this is the key fix
   // for "need the full field visible, no scroll."
-  html += `<div id="bkxCenterWrap" style="display:flex;justify-content:center;">
-    <div id="bkxCanvasOuter" style="width:${totalWidth}px;height:${totalHeight}px;overflow:hidden;flex-shrink:0;">
-      <div id="bkxScaleWrap" style="position:relative;width:${totalWidth}px;height:${totalHeight}px;transform-origin:top left;">
-        <svg width="${totalWidth}" height="${totalHeight}" style="position:absolute;top:0;left:0;">${svgPaths}</svg>
-        ${labelsHtml}
-        ${boxes}
-        ${centerHtml}
-      </div>
+  html += `<div id="bkxCanvasOuter" style="width:${totalWidth}px;max-width:100%;margin:0 auto;overflow:hidden;">
+    <div id="bkxScaleWrap" style="position:relative;width:${totalWidth}px;height:${totalHeight}px;transform-origin:top left;">
+      <svg width="${totalWidth}" height="${totalHeight}" style="position:absolute;top:0;left:0;">${svgPaths}</svg>
+      ${labelsHtml}
+      ${boxes}
+      ${centerHtml}
     </div>
   </div>`;
 
   html += `<div style="margin-top:2.5rem;margin-bottom:1rem;padding-top:1.5rem;border-top:1px solid var(--border2);">
     <div style="font-size:1rem;font-weight:700;color:var(--gold);">Group Stage -- Final Standings</div>
-    <div style="font-size:.78rem;color:var(--muted);margin-top:2px;">Group play concluded. Top 2 in green advanced automatically; additional teams advanced as best third-place finishers.</div>
   </div>`;
 
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;">';
@@ -1250,20 +1246,19 @@ function renderBracket(data){
 function fitBracket(){
   const wrap = document.getElementById('bkxScaleWrap');
   const outer = document.getElementById('bkxCanvasOuter');
-  const centerWrap = document.getElementById('bkxCenterWrap');
-  if(!wrap || !outer || !centerWrap) return;
+  if(!wrap || !outer) return;
   const totalWidth = wrap.offsetWidth;   // unscaled -- transform doesn't change offsetWidth
   const totalHeight = wrap.offsetHeight;
   function fit(){
-    // centerWrap is display:flex;justify-content:center -- the browser's
-    // flex layout engine centers outer natively based on its current width,
-    // regardless of how that width changes below. No JS-computed margin is
-    // needed; this removes an entire category of "did I get the pixel math
-    // right" risk that two previous attempts (margin:auto, then an explicit
-    // calculated margin-left) both ran into.
-    const avail = centerWrap.getBoundingClientRect().width;
-    const scale = Math.min(1, avail / totalWidth);
-    outer.style.width = (totalWidth * scale) + 'px';
+    // CSS alone (width + max-width:100% + margin:0 auto on #bkxCanvasOuter)
+    // now owns both the width and the centering -- the single simplest,
+    // most universally-supported CSS centering case there is. JS no longer
+    // sets outer's width or any margin at all; it only measures whatever
+    // width outer actually ended up at (which reflects max-width:100% on
+    // narrow screens) so the inner content can be scaled to match without
+    // distortion or overflow.
+    const renderedWidth = outer.getBoundingClientRect().width;
+    const scale = Math.min(1, renderedWidth / totalWidth);
     outer.style.height = (totalHeight * scale) + 'px';
     wrap.style.transform = 'scale(' + scale + ')';
   }
