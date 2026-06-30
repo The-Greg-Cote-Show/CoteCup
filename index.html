@@ -504,10 +504,29 @@ function computeScores(completed){
   completed.forEach(f=>{
     const home=norm(f.homeTeam.name);
     const away=norm(f.awayTeam.name);
-    const hg=f.score.fullTime.home??0;
-    const ag=f.score.fullTime.away??0;
+    const duration=(f.score?.duration||'').toUpperCase();
+    const isPK   = duration==='PENALTY_SHOOTOUT';
+    const isET   = duration==='EXTRA_TIME';
     const round=(f.stage||"").toLowerCase();
     const isKO=!round.includes("group");
+
+    // Goals: only count regular-time (fullTime) goals.
+    // football-data.org embeds penalty shootout goals into score.fullTime
+    // for PK matches (e.g., a 1-1 match won 4-3 on penalties returns
+    // fullTime as 4-5 instead of 1-1). Subtract score.penalties to recover
+    // the true 90-minute goal count.
+    const penH = isPK ? (f.score?.penalties?.home??0) : 0;
+    const penA = isPK ? (f.score?.penalties?.away??0) : 0;
+    const hg = (f.score?.fullTime?.home??0) - penH;
+    const ag = (f.score?.fullTime?.away??0) - penA;
+
+    // Winner: use the API's score.winner field rather than comparing goals,
+    // since goal comparison breaks for PK matches (both teams are equal after
+    // stripping penalties from fullTime).
+    const apiWinner = f.score?.winner;
+    const homeWin = apiWinner==='HOME_TEAM' || (!apiWinner && hg>ag);
+    const awayWin = apiWinner==='AWAY_TEAM' || (!apiWinner && ag>hg);
+    const isDraw  = !homeWin && !awayWin;
 
     const add=(team,p)=>{
       const d=getDrafter(team); if(!d) return;
@@ -518,19 +537,20 @@ function computeScores(completed){
     add(home,hg); add(away,ag);
 
     if(!isKO){
-      if(hg>ag) add(home,3);
-      else if(ag>hg) add(away,3);
+      if(homeWin) add(home,3);
+      else if(awayWin) add(away,3);
       else{ add(home,1); add(away,1); }
     } else {
-      // Track advance bonus (once per team)
+      // Advance bonus (once per team)
       if(!advanced.has(home)){ advanced.add(home); add(home,5); }
       if(!advanced.has(away)){ advanced.add(away); add(away,5); }
-      if(hg>ag) add(home,5);
-      else if(ag>hg) add(away,5);
+      // Win bonus (+5) + ET/PK bonus (+1 for winning beyond 90 min)
+      if(homeWin){ add(home,5); if(isPK||isET) add(home,1); }
+      else if(awayWin){ add(away,5); if(isPK||isET) add(away,1); }
       // Championship bonus
-      if(round==="final"){
-        if(hg>ag) add(home,10);
-        else if(ag>hg) add(away,10);
+      if(round==='final'){
+        if(homeWin) add(home,10);
+        else if(awayWin) add(away,10);
       }
     }
   });
