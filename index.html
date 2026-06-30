@@ -94,6 +94,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .drafter-greg{background:rgba(251,146,60,.15);color:var(--greg-col);}
 .match-score-center{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:80px;}
 .score-display{font-size:2rem;font-weight:900;letter-spacing:.05em;line-height:1;}
+.score-pens{font-size:1.1rem;font-weight:700;color:var(--muted);letter-spacing:0;}
 .score-display.live{color:var(--red);}
 .score-display.ft{color:var(--text);}
 .score-display.sched{color:var(--muted);font-size:1rem;font-weight:600;}
@@ -600,10 +601,23 @@ function localTime(utcStr){
 
 function makeMatchCard(f){
   let homeRaw=f.homeTeam.name, awayRaw=f.awayTeam.name;
-  let hgRaw=f.score?.fullTime?.home, agRaw=f.score?.fullTime?.away;
+  const dur = f.score?.duration||"REGULAR";
+  const isPK = dur==="PENALTY_SHOOTOUT";
+  const isET = dur==="EXTRA_TIME";
+  // football-data.org embeds penalty shootout goals into score.fullTime
+  // (e.g. a 1-1 match decided 4-3 on pens returns fullTime as 4-5). Strip
+  // score.penalties out to recover the true regulation/ET score, and keep
+  // the raw penalty score separately for the FIFA-standard "(P 3-4)" tag.
+  const penHRaw = isPK ? (f.score?.penalties?.home??0) : null;
+  const penARaw = isPK ? (f.score?.penalties?.away??0) : null;
+  let hgRaw=(f.score?.fullTime?.home??null), agRaw=(f.score?.fullTime?.away??null);
+  if(isPK && hgRaw!==null) hgRaw -= penHRaw;
+  if(isPK && agRaw!==null) agRaw -= penARaw;
+  let penH=penHRaw, penA=penARaw;
   if(teamRank(homeRaw)>teamRank(awayRaw)){
     [homeRaw,awayRaw]=[awayRaw,homeRaw];
     [hgRaw,agRaw]=[agRaw,hgRaw];
+    [penH,penA]=[penA,penH];
   }
   const home=norm(homeRaw); const away=norm(awayRaw);
   const homeCrest=f.homeTeam?.crest||f.homeTeam?.flag||null;
@@ -620,39 +634,49 @@ function makeMatchCard(f){
   let statusHtml;
   if(isLive){
     const isPaused = f.status==="PAUSED";
-    const isET     = f.status==="EXTRA_TIME";
+    const isETLive = f.status==="EXTRA_TIME";
     const isPKS    = f.status==="PENALTY_SHOOTOUT";
     const minVal   = f.minute || null;
     const inj      = f.injuryTime || null;
     let label="";
     if(isPKS)         label="Penalties";
     else if(isPaused) label="Half Time";
-    else if(isET)     label = minVal ? `ET ${minVal}${inj?"+"+inj:""}′` : "Extra Time";
+    else if(isETLive) label = minVal ? `ET ${minVal}${inj?"+"+inj:""}′` : "Extra Time";
     else if(minVal)   label = inj ? `${minVal}+${inj}′` : `${minVal}′`;
     else              label="Live";
     statusHtml=`<span class="match-status-live">${label}</span>`;
   } else if(isFT){
-    const dur = f.score?.duration||"REGULAR";
-    const endLabel = dur==="PENALTY_SHOOTOUT"?"After Pens":dur==="EXTRA_TIME"?"After ET":"Full Time";
+    const endLabel = isPK?"After Pens":isET?"After ET":"Full Time";
     statusHtml=`<span class="match-status-ft">${endLabel}</span>`;
   } else {
     statusHtml=`<span class="match-status-sched">${local} <span class="local-time">${utcStr}</span></span>`;
   }
+  // FIFA broadcast standard: regulation/ET score first, penalty result in
+  // parentheses after -- e.g. "1–1 (P 3-4)" -- matching how every major
+  // outlet (ESPN, Sky, CBS, BBC) displays a shootout result.
+  const penTag = isPK ? ` <span class="score-pens">(P ${penH}-${penA})</span>` : '';
   const scoreHtml=isLive?`<div class="score-display live">${hg}–${ag}</div>`:
-    isFT?`<div class="score-display ft">${hg}–${ag}</div>`:
+    isFT?`<div class="score-display ft">${hg}–${ag}${penTag}</div>`:
     `<div class="score-display sched">vs</div>`;
 
-  // Calculate points earned for completed matches
-  function ptsFor(goals, isWinner, isDraw, isKO){
-    let p = goals;
-    if(!isKO){ if(isWinner) p+=3; else if(isDraw) p+=1; }
-    else { if(isWinner) p+=5; }
-    return p;
-  }
+  // Calculate points earned for completed matches -- mirrors computeScores
+  // exactly: use score.winner (not goal comparison, which breaks once
+  // penalty goals are stripped and both sides are even) and add the +1
+  // ET/PK bonus on top of the standard +5 knockout win bonus.
   let homePts="", awayPts="";
   if(isFT){
     const isKO = !((f.stage||"").toLowerCase().includes("group"));
-    const homeWin = hg>ag, awayWin = ag>hg, isDraw = hg===ag;
+    const apiWinner = f.score?.winner;
+    const homeWin = apiWinner==='HOME_TEAM' || (!apiWinner && hg>ag);
+    const awayWin = apiWinner==='AWAY_TEAM' || (!apiWinner && ag>hg);
+    const isDraw  = !homeWin && !awayWin;
+    const isETorPK = isPK || isET;
+    function ptsFor(goals, isWinner, isDrw, ko){
+      let p = goals;
+      if(!ko){ if(isWinner) p+=3; else if(isDrw) p+=1; }
+      else { if(isWinner){ p+=5; if(isETorPK) p+=1; } }
+      return p;
+    }
     const hp = ptsFor(hg,homeWin,isDraw,isKO);
     const ap = ptsFor(ag,awayWin,isDraw,isKO);
     homePts = hd ? `<span class="match-pts pts-${DC[hd]}">${hd} +${hp}</span>` : "";
