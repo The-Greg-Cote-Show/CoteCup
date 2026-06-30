@@ -579,15 +579,42 @@ function renderMover(completed){
   const f=completed[completed.length-1];
   const home=norm(f.homeTeam?.name||"");
   const away=norm(f.awayTeam?.name||"");
-  const hg=f.score?.fullTime?.home??0;
-  const ag=f.score?.fullTime?.away??0;
-  document.getElementById("moverHeadline").innerHTML=`${flag(home)} ${home} ${hg}–${ag} ${away} ${flag(away)}`;
-  const winner=hg>ag?home:ag>hg?away:null;
+  const dur=f.score?.duration||"REGULAR";
+  const isPK=dur==="PENALTY_SHOOTOUT";
+  const isET=dur==="EXTRA_TIME";
+  // Strip penalty goals from fullTime to recover the true regulation/ET
+  // score -- same fix applied everywhere else on the site, since
+  // football-data.org embeds shootout goals into fullTime.
+  const penH=isPK?(f.score?.penalties?.home??0):0;
+  const penA=isPK?(f.score?.penalties?.away??0):0;
+  const hg=(f.score?.fullTime?.home??0)-penH;
+  const ag=(f.score?.fullTime?.away??0)-penA;
+  const penTag=isPK?` <span style="color:var(--muted);font-size:.85rem;font-weight:600;">(P ${penH}-${penA})</span>`:"";
+  document.getElementById("moverHeadline").innerHTML=`${flag(home)} ${home} ${hg}–${ag} ${away} ${flag(away)}${penTag}`;
+  // Use the API's winner field, not goal comparison -- goal comparison
+  // breaks for PK matches since both sides are level after stripping the
+  // penalty goals out.
+  const apiWinner=f.score?.winner;
+  const homeWin = apiWinner==='HOME_TEAM' || (!apiWinner && hg>ag);
+  const awayWin = apiWinner==='AWAY_TEAM' || (!apiWinner && ag>hg);
+  const winner = homeWin?home:awayWin?away:null;
   const wd=winner?getDrafter(winner):null;
   document.getElementById("moverSub").textContent=
     winner?(wd?`${winner} earns points for ${wd}`:`${winner} wins`):"Draw — both drafters score goals";
+  // Total points this match actually added across BOTH teams' drafters --
+  // mirrors computeScores exactly: goals + (group W/D bonus) or
+  // (knockout advance + win + ET/PK bonus) for each side, summed.
+  const isKO=!((f.stage||"").toLowerCase().includes("group"));
+  const isDraw=!homeWin && !awayWin;
+  const isETorPK=isPK||isET;
+  function sideTotal(goals,isWinner,isDrw){
+    let p=goals;
+    if(!isKO){ if(isWinner) p+=3; else if(isDrw) p+=1; }
+    else { p+=5; if(isWinner){ p+=5; if(isETorPK) p+=1; } } // +5 advance always, +5 win, +1 ET/PK
+    return p;
+  }
+  const total=sideTotal(hg,homeWin,isDraw)+sideTotal(ag,awayWin,isDraw);
   const gainEl=document.getElementById("moverGain");
-  const total=hg+ag+(winner?3:1);
   gainEl.textContent=`+${total} pts this match`;
   gainEl.style.display="inline-block";
 }
