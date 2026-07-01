@@ -498,63 +498,89 @@ function getDrafter(name){
   return null;
 }
 
-function computeScores(completed){
-  const pts={Yeti:0,Chris:0,Greg:0};
-  const teamPts={};
-  const advanced=new Set();
+function sortByDate(completed){
+  return [...completed].sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate));
+}
 
-  completed.forEach(f=>{
-    const home=norm(f.homeTeam.name);
-    const away=norm(f.awayTeam.name);
+// Single source of truth for what a completed fixture is worth, per side.
+// Every renderer on the site (match cards, history rows, the Last Result
+// banner, and the running standings) reads from THIS function's output
+// instead of re-deriving the scoring formula independently. Separate copies
+// of this same logic drifting out of sync is what caused the Cote
+// d'Ivoire/Norway badge to look wrong: makeMatchCard's own copy of the
+// formula only awarded the +5 "advance to knockouts" bonus to the WINNING
+// side of a knockout match, when that bonus actually fires once per team on
+// their first knockout appearance, win or lose.
+function computeMatchPointsMap(completed){
+  const sorted = sortByDate(completed);
+  const advanced = new Set();
+  const map = new Map();
+
+  sorted.forEach(f=>{
+    const home=norm(f.homeTeam.name), away=norm(f.awayTeam.name);
     const duration=(f.score?.duration||'').toUpperCase();
-    const isPK   = duration==='PENALTY_SHOOTOUT';
-    const isET   = duration==='EXTRA_TIME';
+    const isPK = duration==='PENALTY_SHOOTOUT';
+    const isET = duration==='EXTRA_TIME';
     const round=(f.stage||"").toLowerCase();
     const isKO=!round.includes("group");
 
-    // Goals: only count regular-time (fullTime) goals.
-    // football-data.org embeds penalty shootout goals into score.fullTime
-    // for PK matches (e.g., a 1-1 match won 4-3 on penalties returns
-    // fullTime as 4-5 instead of 1-1). Subtract score.penalties to recover
-    // the true 90-minute goal count.
     const penH = isPK ? (f.score?.penalties?.home??0) : 0;
     const penA = isPK ? (f.score?.penalties?.away??0) : 0;
     const hg = (f.score?.fullTime?.home??0) - penH;
     const ag = (f.score?.fullTime?.away??0) - penA;
 
-    // Winner: use the API's score.winner field rather than comparing goals,
-    // since goal comparison breaks for PK matches (both teams are equal after
-    // stripping penalties from fullTime).
     const apiWinner = f.score?.winner;
     const homeWin = apiWinner==='HOME_TEAM' || (!apiWinner && hg>ag);
     const awayWin = apiWinner==='AWAY_TEAM' || (!apiWinner && ag>hg);
     const isDraw  = !homeWin && !awayWin;
 
+    let homePts = hg, awayPts = ag;
+
+    if(!isKO){
+      if(homeWin) homePts += 3;
+      else if(awayWin) awayPts += 3;
+      else { homePts += 1; awayPts += 1; }
+    } else {
+      // Advance bonus: fires once per team, on whichever knockout match is
+      // their first -- regardless of whether they win or lose it.
+      if(!advanced.has(home)){ advanced.add(home); homePts += 5; }
+      if(!advanced.has(away)){ advanced.add(away); awayPts += 5; }
+      // Win bonus (+5) + ET/PK bonus (+1 for winning beyond 90 min)
+      if(homeWin){ homePts += 5; if(isPK||isET) homePts += 1; }
+      else if(awayWin){ awayPts += 5; if(isPK||isET) awayPts += 1; }
+      // Championship bonus
+      if(round==='final'){
+        if(homeWin) homePts += 10;
+        else if(awayWin) awayPts += 10;
+      }
+    }
+
+    map.set(f.id, { homePts, awayPts, homeWin, awayWin, isDraw, hg, ag });
+  });
+
+  return map;
+}
+
+// Populated once per fetchData() cycle. All the per-match badge renderers
+// below look up their numbers here instead of recomputing independently.
+let MATCH_POINTS_MAP = new Map();
+
+function computeScores(completed){
+  const pts={Yeti:0,Chris:0,Greg:0};
+  const teamPts={};
+  const map = computeMatchPointsMap(completed);
+
+  completed.forEach(f=>{
+    const home=norm(f.homeTeam.name), away=norm(f.awayTeam.name);
+    const m = map.get(f.id);
+    if(!m) return;
     const add=(team,p)=>{
       const d=getDrafter(team); if(!d) return;
       pts[d]+=p;
       teamPts[team]=(teamPts[team]||0)+p;
     };
-
-    add(home,hg); add(away,ag);
-
-    if(!isKO){
-      if(homeWin) add(home,3);
-      else if(awayWin) add(away,3);
-      else{ add(home,1); add(away,1); }
-    } else {
-      // Advance bonus (once per team)
-      if(!advanced.has(home)){ advanced.add(home); add(home,5); }
-      if(!advanced.has(away)){ advanced.add(away); add(away,5); }
-      // Win bonus (+5) + ET/PK bonus (+1 for winning beyond 90 min)
-      if(homeWin){ add(home,5); if(isPK||isET) add(home,1); }
-      else if(awayWin){ add(away,5); if(isPK||isET) add(away,1); }
-      // Championship bonus
-      if(round==='final'){
-        if(homeWin) add(home,10);
-        else if(awayWin) add(away,10);
-      }
-    }
+    add(home, m.homePts);
+    add(away, m.awayPts);
   });
   return {pts,teamPts};
 }
@@ -576,12 +602,14 @@ function renderMover(completed){
     document.getElementById("moverHeadline").textContent="No completed matches yet.";
     return;
   }
-  const f=completed[completed.length-1];
+  // Pick the most recent match by actual date, not by array position --
+  // the API doesn't guarantee completed's last element is chronologically
+  // last.
+  const f = sortByDate(completed)[completed.length-1];
   const home=norm(f.homeTeam?.name||"");
   const away=norm(f.awayTeam?.name||"");
   const dur=f.score?.duration||"REGULAR";
   const isPK=dur==="PENALTY_SHOOTOUT";
-  const isET=dur==="EXTRA_TIME";
   // Strip penalty goals from fullTime to recover the true regulation/ET
   // score -- same fix applied everywhere else on the site, since
   // football-data.org embeds shootout goals into fullTime.
@@ -591,29 +619,16 @@ function renderMover(completed){
   const ag=(f.score?.fullTime?.away??0)-penA;
   const penTag=isPK?` <span style="color:var(--muted);font-size:.85rem;font-weight:600;">(P ${penH}-${penA})</span>`:"";
   document.getElementById("moverHeadline").innerHTML=`${flag(home)} ${home} ${hg}–${ag} ${away} ${flag(away)}${penTag}`;
-  // Use the API's winner field, not goal comparison -- goal comparison
-  // breaks for PK matches since both sides are level after stripping the
-  // penalty goals out.
-  const apiWinner=f.score?.winner;
-  const homeWin = apiWinner==='HOME_TEAM' || (!apiWinner && hg>ag);
-  const awayWin = apiWinner==='AWAY_TEAM' || (!apiWinner && ag>hg);
-  const winner = homeWin?home:awayWin?away:null;
+
+  // Points and winner both come from the shared map -- single source of
+  // truth, same numbers as the match card badge and the standings total.
+  const m = MATCH_POINTS_MAP.get(f.id);
+  const winner = m ? (m.homeWin?home:m.awayWin?away:null) : null;
   const wd=winner?getDrafter(winner):null;
   document.getElementById("moverSub").textContent=
     winner?(wd?`${winner} earns points for ${wd}`:`${winner} wins`):"Draw — both drafters score goals";
-  // Total points this match actually added across BOTH teams' drafters --
-  // mirrors computeScores exactly: goals + (group W/D bonus) or
-  // (knockout advance + win + ET/PK bonus) for each side, summed.
-  const isKO=!((f.stage||"").toLowerCase().includes("group"));
-  const isDraw=!homeWin && !awayWin;
-  const isETorPK=isPK||isET;
-  function sideTotal(goals,isWinner,isDrw){
-    let p=goals;
-    if(!isKO){ if(isWinner) p+=3; else if(isDrw) p+=1; }
-    else { p+=5; if(isWinner){ p+=5; if(isETorPK) p+=1; } } // +5 advance always, +5 win, +1 ET/PK
-    return p;
-  }
-  const total=sideTotal(hg,homeWin,isDraw)+sideTotal(ag,awayWin,isDraw);
+
+  const total = m ? (m.homePts + m.awayPts) : (hg+ag);
   const gainEl=document.getElementById("moverGain");
   gainEl.textContent=`+${total} pts this match`;
   gainEl.style.display="inline-block";
@@ -641,10 +656,15 @@ function makeMatchCard(f){
   if(isPK && hgRaw!==null) hgRaw -= penHRaw;
   if(isPK && agRaw!==null) agRaw -= penARaw;
   let penH=penHRaw, penA=penARaw;
+  // Track whether home/away got flipped for display ranking, so the shared
+  // points map (keyed to the ORIGINAL fixture orientation) can be assigned
+  // to the correct displayed side below.
+  let idSwapped=false;
   if(teamRank(homeRaw)>teamRank(awayRaw)){
     [homeRaw,awayRaw]=[awayRaw,homeRaw];
     [hgRaw,agRaw]=[agRaw,hgRaw];
     [penH,penA]=[penA,penH];
+    idSwapped=true;
   }
   const home=norm(homeRaw); const away=norm(awayRaw);
   const homeCrest=f.homeTeam?.crest||f.homeTeam?.flag||null;
@@ -686,28 +706,20 @@ function makeMatchCard(f){
     isFT?`<div class="score-display ft">${hg}–${ag}${penTag}</div>`:
     `<div class="score-display sched">vs</div>`;
 
-  // Calculate points earned for completed matches -- mirrors computeScores
-  // exactly: use score.winner (not goal comparison, which breaks once
-  // penalty goals are stripped and both sides are even) and add the +1
-  // ET/PK bonus on top of the standard +5 knockout win bonus.
+  // Points earned for completed matches -- pulled from the single shared
+  // MATCH_POINTS_MAP (built once per fetchData cycle) instead of a locally
+  // re-derived formula. The prior local formula only awarded the +5
+  // advance-to-knockouts bonus to the WINNING side, which is why a
+  // knockout loser's badge (e.g. Cote d'Ivoire losing to Norway) undercounted.
   let homePts="", awayPts="";
   if(isFT){
-    const isKO = !((f.stage||"").toLowerCase().includes("group"));
-    const apiWinner = f.score?.winner;
-    const homeWin = apiWinner==='HOME_TEAM' || (!apiWinner && hg>ag);
-    const awayWin = apiWinner==='AWAY_TEAM' || (!apiWinner && ag>hg);
-    const isDraw  = !homeWin && !awayWin;
-    const isETorPK = isPK || isET;
-    function ptsFor(goals, isWinner, isDrw, ko){
-      let p = goals;
-      if(!ko){ if(isWinner) p+=3; else if(isDrw) p+=1; }
-      else { if(isWinner){ p+=5; if(isETorPK) p+=1; } }
-      return p;
+    const m = MATCH_POINTS_MAP.get(f.id);
+    if(m){
+      const hp = idSwapped ? m.awayPts : m.homePts;
+      const ap = idSwapped ? m.homePts : m.awayPts;
+      homePts = hd ? `<span class="match-pts pts-${DC[hd]}">${hd} +${hp}</span>` : "";
+      awayPts = ad ? `<span class="match-pts pts-${DC[ad]}">${ad} +${ap}</span>` : "";
     }
-    const hp = ptsFor(hg,homeWin,isDraw,isKO);
-    const ap = ptsFor(ag,awayWin,isDraw,isKO);
-    homePts = hd ? `<span class="match-pts pts-${DC[hd]}">${hd} +${hp}</span>` : "";
-    awayPts = ad ? `<span class="match-pts pts-${DC[ad]}">${ad} +${ap}</span>` : "";
   }
 
   const ht=hd?`<div class="team-drafter drafter-${DC[hd]}">${hd}</div>`:"";
@@ -901,21 +913,17 @@ function renderHistory(data){
       const ag=(f.score?.fullTime?.away??0)-penA;
       const hd=getDrafter(home);
       const adAway=getDrafter(away);
-      const isKO=!((f.stage||'').toLowerCase().includes('group'));
-      // Use the API's winner field, not goal comparison -- goal comparison
-      // breaks for PK matches since both sides are level after stripping
-      // penalty goals out.
-      const apiWinner=f.score?.winner;
-      const homeWin = apiWinner==='HOME_TEAM' || (!apiWinner && hg>ag);
-      const awayWin = apiWinner==='AWAY_TEAM' || (!apiWinner && ag>hg);
-      const isDraw = !homeWin && !awayWin;
-      const isETorPK = isPK || isET;
-      const homePts=hg+(isKO?(homeWin?(5+(isETorPK?1:0)):0):(homeWin?3:isDraw?1:0));
-      const awayPts=ag+(isKO?(awayWin?(5+(isETorPK?1:0)):0):(awayWin?3:isDraw?1:0));
       const endLabel=isPK?'Pens':isET?'ET':'FT';
       const penTag = isPK ? `<div style="font-size:.62rem;color:var(--muted);font-weight:600;">(P ${penH}-${penA})</div>` : '';
       const homeColor = hd ? `var(--${DC[hd]}-col)` : 'var(--muted)';
       const awayColor = adAway ? `var(--${DC[adAway]}-col)` : 'var(--muted)';
+      // Points pulled from the shared map -- same source of truth as the
+      // Live tab match cards and the running standings. The prior inline
+      // formula only gave the +5 advance bonus to the winning side, which
+      // meant a knockout loser's history row undercounted its true value.
+      const m = MATCH_POINTS_MAP.get(f.id);
+      const homePts = m ? m.homePts : hg;
+      const awayPts = m ? m.awayPts : ag;
       html+=`<div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:.75rem 1rem;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.75rem;">
         <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
           <div style="font-size:1.5rem;line-height:1">${teamImg(home,f.homeTeam?.crest,"1.5rem")}</div>
@@ -1502,6 +1510,7 @@ async function fetchData(){
     if(!res.ok) throw new Error(`Worker error ${res.status}`);
     const data=await res.json();
     window._lastData = data;
+    MATCH_POINTS_MAP = computeMatchPointsMap(data.fixtures.completed||[]);
     const {pts,teamPts}=computeScores(data.fixtures.completed||[]);
     const sorted=renderStandings(pts, data.fixtures.completed||[]);
     renderLeader(sorted);
