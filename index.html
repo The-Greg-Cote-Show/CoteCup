@@ -805,7 +805,10 @@ function renderStandings(pts, completed){
   });
   const medals=["🥇","🥈","🥉"];
   document.getElementById("standingsList").innerHTML=sorted.map(([name,p],i)=>{
-    const remaining = DRAFT[name].filter(t=>!eliminated.has(t)).length;
+    // A team counts toward "remaining" only if it actually qualified for
+    // knockouts AND hasn't lost a knockout match yet -- fixes the earlier
+    // bug where teams eliminated in group play were still being counted.
+    const remaining = DRAFT[name].filter(t=>KNOCKOUT_QUALIFIERS.has(t) && !eliminated.has(t)).length;
     return `
     <div class="drafter-standing ${i===0?"first":""}">
       <div class="standing-rank">${medals[i]}</div>
@@ -1017,6 +1020,15 @@ const BRACKET_ORDER_RIGHT = [
   ["Argentina","Cabo Verde"], ["Australia","Egypt"],
   ["Switzerland","Algeria"], ["Colombia","Ghana"],
 ];
+
+// The verified set of 32 teams that actually qualified for the knockout
+// stage, taken directly from the two arrays above (confirmed against the
+// official FIFA bracket). A team not in this set never advanced past group
+// play, so it should never count toward "teams remaining" for a drafter,
+// even though it also never technically "lost a knockout match."
+const KNOCKOUT_QUALIFIERS = new Set(
+  [...BRACKET_ORDER_LEFT, ...BRACKET_ORDER_RIGHT].flat()
+);
 
 function orderR32(r32Data, orderPairs){
   // Re-sort the real match data to match the fixed display order above,
