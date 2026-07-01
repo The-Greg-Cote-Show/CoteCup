@@ -776,20 +776,45 @@ function renderMatches(today, live, yesterday, tomorrow){
   </div>`;
 }
 
-function renderStandings(pts){
+// Returns the set of team names eliminated from the knockout stage --
+// any team whose most recently played knockout match they lost. Uses the
+// same score.winner-based logic as computeScores (not raw goal comparison,
+// which breaks for matches decided on penalties after fullTime is
+// corrected for embedded shootout goals).
+function getEliminatedTeams(completed){
+  const eliminated = new Set();
+  completed.forEach(f=>{
+    const round=(f.stage||"").toLowerCase();
+    if(round.includes("group")) return; // group stage never eliminates a team here
+    const h=norm(f.homeTeam?.name||""), a=norm(f.awayTeam?.name||"");
+    const apiWinner=f.score?.winner;
+    if(apiWinner==="HOME_TEAM") eliminated.add(a);
+    else if(apiWinner==="AWAY_TEAM") eliminated.add(h);
+    // If winner is missing/draw-like (shouldn't happen in a knockout match
+    // once it's FINISHED), don't eliminate either side -- avoids wrongly
+    // eliminating a team from incomplete data.
+  });
+  return eliminated;
+}
+
+function renderStandings(pts, completed){
+  const eliminated = getEliminatedTeams(completed||[]);
   const sorted=Object.entries(pts).sort((a,b)=>{
     if(b[1]!==a[1]) return b[1]-a[1];
     return TIEBREAK[a[0]]-TIEBREAK[b[0]];
   });
   const medals=["🥇","🥈","🥉"];
-  document.getElementById("standingsList").innerHTML=sorted.map(([name,p],i)=>`
+  document.getElementById("standingsList").innerHTML=sorted.map(([name,p],i)=>{
+    const remaining = DRAFT[name].filter(t=>!eliminated.has(t)).length;
+    return `
     <div class="drafter-standing ${i===0?"first":""}">
       <div class="standing-rank">${medals[i]}</div>
       <div class="standing-avatar"><img src="${AVATARS[name]}" alt="${name}"></div>
       <div class="standing-info"><div class="standing-name">${name}</div>
-      <div class="standing-teams">${DRAFT[name].length} teams</div></div>
+      <div class="standing-teams">${remaining} teams remaining</div></div>
       <div class="standing-pts ${DC[name]}">${p}</div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   return sorted;
 }
 
@@ -1466,7 +1491,7 @@ async function fetchData(){
     const data=await res.json();
     window._lastData = data;
     const {pts,teamPts}=computeScores(data.fixtures.completed||[]);
-    const sorted=renderStandings(pts);
+    const sorted=renderStandings(pts, data.fixtures.completed||[]);
     renderLeader(sorted);
     renderMover(data.fixtures.completed||[]);
     // Re-bucket ALL fixtures by LOCAL date
