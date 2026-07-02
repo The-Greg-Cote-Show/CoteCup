@@ -1029,47 +1029,63 @@ const BRACKET_ORDER_RIGHT = [
   ["Switzerland","Algeria"], ["Colombia","Ghana"],
 ];
 
-// Verified venue for each of the 16 confirmed Round of 32 matchups (group
-// stage is complete, so all 16 pairings are locked). Sourced from FIFA's
-// official schedule and cross-checked against live match coverage --
-// key is the two team names sorted alphabetically and joined, so lookup
-// works regardless of which side is home/away in the API's fixture data.
-// football-data.org's fixture objects don't include a venue field at all,
-// so this is the only way to show a stadium name on the bracket. Round of
-// 16 and later rounds are NOT included here on purpose -- which two teams
-// actually meet in those rounds isn't determined until earlier results
-// come in, so a venue can be assigned to a bracket SLOT in advance but not
-// confidently to a specific matchup yet.
-const VENUE_LOOKUP = {};
-(function(){
-  const pairs = [
-    [["Germany","Paraguay"], "Gillette Stadium, Foxborough"],
-    [["Netherlands","Morocco"], "Estadio BBVA, Monterrey"],
-    [["Brazil","Japan"], "NRG Stadium, Houston"],
-    [["South Africa","Canada"], "SoFi Stadium, Inglewood"],
-    [["Norway","Côte d'Ivoire"], "AT&T Stadium, Arlington"],
-    [["France","Sweden"], "MetLife Stadium, East Rutherford"],
-    [["Mexico","Ecuador"], "Estadio Azteca, Mexico City"],
-    [["England","DR Congo"], "Mercedes-Benz Stadium, Atlanta"],
-    [["Belgium","Senegal"], "Lumen Field, Seattle"],
-    [["United States","Bosnia and Herzegovina"], "Levi's Stadium, Santa Clara"],
-    [["Spain","Austria"], "SoFi Stadium, Inglewood"],
-    [["Portugal","Croatia"], "BMO Field, Toronto"],
-    [["Switzerland","Algeria"], "BC Place, Vancouver"],
-    [["Australia","Egypt"], "AT&T Stadium, Arlington"],
-    [["Argentina","Cabo Verde"], "Hard Rock Stadium, Miami Gardens"],
-    [["Colombia","Ghana"], "Arrowhead Stadium, Kansas City"],
-  ];
-  pairs.forEach(([[a,b],venue])=>{
-    const key = [norm(a),norm(b)].sort().join("|");
-    VENUE_LOOKUP[key] = venue;
-  });
-})();
+// Static knockout schedule for Round of 16 through the Final. This is
+// hardcoded, not pulled from any API, because it doesn't change: FIFA
+// fixed these dates, times, and cities months in advance. Round of 32 is
+// deliberately excluded here since those 16 matchups are already real,
+// live fixtures with their own utcDate from football-data.org -- no need
+// to duplicate that. Everything below is keyed by bracket SLOT (which
+// side, which position) rather than by team name, so a slot shows its
+// correct date/time/city even before the two teams playing there are
+// decided. Verified against FIFA's own match centre, NBC Sports, and CBS
+// News schedules, cross-checked for consistency before use. City only,
+// no stadium name, per request. Times converted from the published
+// Eastern Time kickoff to UTC (EDT = UTC-4 in this window) so the
+// existing local-time display logic renders it correctly for any visitor.
+const KO_SCHEDULE = {
+  r16: {
+    left:  [
+      { utcDate: "2026-07-04T21:00:00Z", city: "Philadelphia" },
+      { utcDate: "2026-07-04T17:00:00Z", city: "Houston" },
+      { utcDate: "2026-07-06T19:00:00Z", city: "Dallas" },
+      { utcDate: "2026-07-07T00:00:00Z", city: "Seattle" },
+    ],
+    right: [
+      { utcDate: "2026-07-05T20:00:00Z", city: "East Rutherford" },
+      { utcDate: "2026-07-06T00:00:00Z", city: "Mexico City" },
+      { utcDate: "2026-07-07T16:00:00Z", city: "Atlanta" },
+      { utcDate: "2026-07-07T20:00:00Z", city: "Vancouver" },
+    ],
+  },
+  qf: {
+    left:  [
+      { utcDate: "2026-07-09T20:00:00Z", city: "Boston" },
+      { utcDate: "2026-07-10T19:00:00Z", city: "Los Angeles" },
+    ],
+    right: [
+      { utcDate: "2026-07-11T21:00:00Z", city: "Miami" },
+      { utcDate: "2026-07-12T01:00:00Z", city: "Kansas City" },
+    ],
+  },
+  sf: {
+    left:  [{ utcDate: "2026-07-14T19:00:00Z", city: "Dallas" }],
+    right: [{ utcDate: "2026-07-15T19:00:00Z", city: "Atlanta" }],
+  },
+  third: [{ utcDate: "2026-07-18T21:00:00Z", city: "Miami" }],
+  final: [{ utcDate: "2026-07-19T19:00:00Z", city: "East Rutherford" }],
+};
 
-function getVenue(home, away){
-  if(!home || !away) return null;
-  const key = [norm(home),norm(away)].sort().join("|");
-  return VENUE_LOOKUP[key] || null;
+// Overlays the static schedule (date + city) onto a round's match data
+// array, preserving whatever real team/score info already exists (or the
+// "partial"/empty placeholder if the matchup isn't decided yet). This is
+// what makes a "vs TBD" box still show its real date and city.
+function applySchedule(matchDataArray, scheduleArray){
+  return matchDataArray.map((d, i) => {
+    const sched = scheduleArray[i];
+    if(!sched) return d;
+    const base = d || { home:null, away:null, isDone:false, isLive:false, winner:null, partial:true };
+    return { ...base, utcDate: sched.utcDate, city: sched.city };
+  });
 }
 
 // The verified set of 32 teams that actually qualified for the knockout
@@ -1145,27 +1161,41 @@ function renderBracket(data){
     return out;
   }
 
-  const leftR16 = buildRound(leftR32, byStage.r16);
-  const rightR16 = buildRound(rightR32, byStage.r16);
-  const leftQF = buildRound(leftR16, byStage.qf);
-  const rightQF = buildRound(rightR16, byStage.qf);
-  const leftSF = buildRound(leftQF, byStage.sf);
-  const rightSF = buildRound(rightQF, byStage.sf);
+  const leftR16Raw = buildRound(leftR32, byStage.r16);
+  const rightR16Raw = buildRound(rightR32, byStage.r16);
+  const leftR16 = applySchedule(leftR16Raw, KO_SCHEDULE.r16.left);
+  const rightR16 = applySchedule(rightR16Raw, KO_SCHEDULE.r16.right);
 
-  const finalData = (leftSF[0] && rightSF[0])
+  const leftQFRaw = buildRound(leftR16, byStage.qf);
+  const rightQFRaw = buildRound(rightR16, byStage.qf);
+  const leftQF = applySchedule(leftQFRaw, KO_SCHEDULE.qf.left);
+  const rightQF = applySchedule(rightQFRaw, KO_SCHEDULE.qf.right);
+
+  const leftSFRaw = buildRound(leftQF, byStage.sf);
+  const rightSFRaw = buildRound(rightQF, byStage.sf);
+  const leftSF = applySchedule(leftSFRaw, KO_SCHEDULE.sf.left);
+  const rightSF = applySchedule(rightSFRaw, KO_SCHEDULE.sf.right);
+
+  const finalDataRaw = (leftSF[0] && rightSF[0])
     ? (function(){
         const teamA = leftSF[0]?.winner, teamB = rightSF[0]?.winner;
         const found = byStage.final.find(f=>{
           const h=norm(f.homeTeam?.name||''), a=norm(f.awayTeam?.name||'');
           return (h===teamA&&a===teamB)||(h===teamB&&a===teamA);
         });
-        return found ? matchCardData(found) : null;
+        return found ? matchCardData(found) : { home: teamA||null, away: teamB||null, isDone:false, isLive:false, winner:null, partial:true };
       })()
-    : null;
-  const thirdData = byStage.third.length ? matchCardData(byStage.third[0]) : null;
+    : { home:null, away:null, isDone:false, isLive:false, winner:null, partial:true };
+  const finalData = applySchedule([finalDataRaw], KO_SCHEDULE.final)[0];
+
+  const thirdDataRaw = byStage.third.length ? matchCardData(byStage.third[0]) : { home:null, away:null, isDone:false, isLive:false, winner:null, partial:true };
+  const thirdData = applySchedule([thirdDataRaw], KO_SCHEDULE.third)[0];
 
   function miniMatch(d, scale){
-    if(!d || (!d.home && !d.away)){
+    // Fully blank only when there's no data AND no scheduled date at all
+    // (shouldn't normally happen once applySchedule runs, but keep as a
+    // safe fallback).
+    if(!d || (!d.home && !d.away && !d.utcDate)){
       return `<div class="bkx-match-wrap"><div class="bkx-match bkx-empty"></div></div>`;
     }
     const hd=getDrafter(d.home), ad=getDrafter(d.away);
@@ -1174,17 +1204,17 @@ function renderBracket(data){
     const aScore = d.isDone||d.isLive ? (d.ag??'') : '';
     const hAvatar = hd ? `<img class="bkx-avatar" src="${AVATARS[hd]}" alt="${hd}" title="${hd}">` : '';
     const aAvatar = ad ? `<img class="bkx-avatar" src="${AVATARS[ad]}" alt="${ad}" title="${ad}">` : '';
-    // Date, time, and venue above the match -- shown only when we have a
-    // real confirmed fixture (both teams known). Partial "vs TBD" slots
-    // don't get one, since which two teams actually play there isn't
-    // determined until the earlier round resolves.
+    // Date, time, and city above the match. Shown whenever we have a
+    // scheduled slot (R32 uses the real live fixture date; R16 onward uses
+    // the static FIFA schedule applied above), regardless of whether both
+    // teams are determined yet -- the slot's date/time/city is fixed by
+    // FIFA in advance even when the matchup itself isn't.
     let dateLine = '';
-    if(d.utcDate && d.home && d.away){
+    if(d.utcDate){
       const dt = new Date(d.utcDate);
       const dateStr = dt.toLocaleDateString([],{month:'short',day:'numeric'});
       const timeStr = dt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
-      const venue = getVenue(d.home, d.away);
-      dateLine = `<div class="bkx-date">${dateStr}, ${timeStr}${venue?` &middot; ${venue}`:''}</div>`;
+      dateLine = `<div class="bkx-date">${dateStr}, ${timeStr}${d.city?` &middot; ${d.city}`:''}</div>`;
     }
     // FIFA broadcast standard: show the regulation/ET score, with a compact
     // penalty-result tag next to the winner's row only (matches how ESPN/
@@ -1230,9 +1260,14 @@ function renderBracket(data){
   // aligned -- box CENTERS (used for connectors) are unaffected, only the
   // space above each box grows to fit the new line.
   const DATE_H = 20;
+  // Room reserved above the R32 row specifically for its round label
+  // ("Round of 32"), since R32 never had a label above it before and needs
+  // its own top offset the same way DATE_H does.
+  const LABEL_GAP = 7, LABEL_BLOCK_H = 19;
+  const ROUND_LABEL_H = LABEL_GAP + LABEL_BLOCK_H;
 
   const r32Centers = [];
-  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+DATE_H+V_GAP) + DATE_H + CARD_H/2); }
+  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+DATE_H+V_GAP) + ROUND_LABEL_H + DATE_H + CARD_H/2); }
   const r16Centers = [0,1,2,3].map(i => (r32Centers[i*2]+r32Centers[i*2+1])/2);
   const qfCenters  = [0,1].map(i => (r16Centers[i*2]+r16Centers[i*2+1])/2);
   const sfCenter   = (qfCenters[0]+qfCenters[1])/2;
@@ -1327,18 +1362,19 @@ function renderBracket(data){
   const champion = finalData?.isDone ? finalData.winner : null;
 
   let boxes = '';
-  const LABEL_GAP = 7, LABEL_BLOCK_H = 19; // space reserved above each box for its label
   function colLabel(text, x, firstBoxTop){
     const labelTop = firstBoxTop - LABEL_GAP - LABEL_BLOCK_H;
     return `<div style="position:absolute;left:${x}px;top:${labelTop}px;width:${CARD_W}px;text-align:center;font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);">${text}</div>`;
   }
   let labelsHtml = '';
-  labelsHtml += colLabel('Quarterfinal Round', colX.leftR16, r16Centers[0]-CARD_H/2-DATE_H);
-  labelsHtml += colLabel('Semifinal Round', colX.leftQF, qfCenters[0]-CARD_H/2-DATE_H);
-  labelsHtml += colLabel('Final Round', colX.leftSF, sfCenter-CARD_H/2-DATE_H);
-  labelsHtml += colLabel('Final Round', colX.rightSF, sfCenter-CARD_H/2-DATE_H);
-  labelsHtml += colLabel('Semifinal Round', colX.rightQF, qfCenters[0]-CARD_H/2-DATE_H);
-  labelsHtml += colLabel('Quarterfinal Round', colX.rightR16, r16Centers[0]-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Round of 32', colX.leftR32, r32Centers[0]-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Round of 16', colX.leftR16, r16Centers[0]-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Quarterfinal Round', colX.leftQF, qfCenters[0]-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Semifinal Round', colX.leftSF, sfCenter-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Semifinal Round', colX.rightSF, sfCenter-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Quarterfinal Round', colX.rightQF, qfCenters[0]-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Round of 16', colX.rightR16, r16Centers[0]-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Round of 32', colX.rightR32, r32Centers[0]-CARD_H/2-DATE_H);
 
   boxes += boxesHtml(leftR32, r32Centers, colX.leftR32);
   boxes += boxesHtml(leftR16, r16Centers, colX.leftR16);
@@ -1502,26 +1538,27 @@ function renderStandingsChart(completed){
   const pts = {Yeti:0, Chris:0, Greg:0};
   const history = [{label:'Start', Yeti:0, Chris:0, Greg:0}, {label:'', Yeti:0, Chris:0, Greg:0, gap:true}];
 
-  // Group stage (June 11-27) gets 3-day x-axis label buckets to reduce
-  // crowding from ~70 matches across 17 days; round of 32 onward (June 28+)
-  // keeps individual daily labels since there's far less density per day.
-  // This only changes the LABEL text -- every match still gets its own
-  // plotted point on the line, so no detail is lost.
-  // Group stage (June 11-27) gets three bigger x-axis label buckets to
-  // reduce crowding from ~70 matches across 17 days; round of 32 onward
-  // (June 28+) keeps individual daily labels since there's far less density
-  // per day. This only changes the LABEL text -- every match still gets its
-  // own plotted point on the line, so no detail is lost.
-  function bucketLabel(date){
+  // Group stage (June 11-27) collapses to ONE point per 3-day bucket
+  // (cumulative total as of the last match in that period), instead of one
+  // point per match. With ~70 group matches, plotting every one of them
+  // made that portion of the line dense and jagged compared to the sparser
+  // knockout stage. Collapsing to period endpoints is what actually fixes
+  // the crowding -- relabeling the x-axis text alone (the earlier attempt)
+  // didn't reduce the number of plotted points, just the labels shown for
+  // them. Round of 32 onward (June 28+) keeps one point per match, since
+  // there's already plenty of room there once the group stage is condensed.
+  function bucketFor(date){
     const y = date.getFullYear(), m = date.getMonth(), day = date.getDate();
-    const mStr = date.toLocaleDateString([],{month:'short'});
     if(y===2026 && m===5){ // June
-      if(day>=11 && day<=16) return `${mStr} 11-16`;
-      if(day>=17 && day<=22) return `${mStr} 17-22`;
-      if(day>=23 && day<=27) return `${mStr} 23-27`;
+      if(day>=11 && day<=16) return 'Jun 11-16';
+      if(day>=17 && day<=22) return 'Jun 17-22';
+      if(day>=23 && day<=27) return 'Jun 23-27';
     }
-    return date.toLocaleDateString([],{month:'short',day:'numeric'});
+    return null; // not in the group-stage window -- render individually
   }
+
+  let currentBucket = null;
+  let bucketPts = null;
 
   sorted.forEach(f=>{
     const h=norm(f.homeTeam?.name||''), a=norm(f.awayTeam?.name||'');
@@ -1531,9 +1568,25 @@ function renderStandingsChart(completed){
     const homeWin=hg>ag, awayWin=ag>hg, isDraw=hg===ag;
     if(hd){ pts[hd]+= hg + (isKO?(homeWin?5:0):(homeWin?3:isDraw?1:0)); }
     if(ad){ pts[ad]+= ag + (isKO?(awayWin?5:0):(awayWin?3:isDraw?1:0)); }
-    const d=bucketLabel(new Date(f.utcDate));
-    history.push({label:d,...pts});
+
+    const bucket = bucketFor(new Date(f.utcDate));
+    if(bucket){
+      if(currentBucket && bucket !== currentBucket){
+        // Bucket changed (e.g. Jun 11-16 -> Jun 17-22): flush the previous
+        // bucket's final point before starting to accumulate the new one.
+        history.push(bucketPts);
+      }
+      currentBucket = bucket;
+      bucketPts = {label:bucket, ...pts};
+    } else {
+      // Leaving the group-stage window (or already past it): flush
+      // whatever bucket point is pending, then plot this match on its own.
+      if(bucketPts){ history.push(bucketPts); bucketPts=null; currentBucket=null; }
+      const d = new Date(f.utcDate).toLocaleDateString([],{month:'short',day:'numeric'});
+      history.push({label:d, ...pts});
+    }
   });
+  if(bucketPts) history.push(bucketPts); // flush a trailing bucket if the data ends mid-group-stage
 
   const W=Math.max(el.offsetWidth||600, 400), H=260, PAD={t:40,r:80,b:30,l:40};
   const plotW=W-PAD.l-PAD.r, plotH=H-PAD.t-PAD.b;
