@@ -1029,6 +1029,49 @@ const BRACKET_ORDER_RIGHT = [
   ["Switzerland","Algeria"], ["Colombia","Ghana"],
 ];
 
+// Verified venue for each of the 16 confirmed Round of 32 matchups (group
+// stage is complete, so all 16 pairings are locked). Sourced from FIFA's
+// official schedule and cross-checked against live match coverage --
+// key is the two team names sorted alphabetically and joined, so lookup
+// works regardless of which side is home/away in the API's fixture data.
+// football-data.org's fixture objects don't include a venue field at all,
+// so this is the only way to show a stadium name on the bracket. Round of
+// 16 and later rounds are NOT included here on purpose -- which two teams
+// actually meet in those rounds isn't determined until earlier results
+// come in, so a venue can be assigned to a bracket SLOT in advance but not
+// confidently to a specific matchup yet.
+const VENUE_LOOKUP = {};
+(function(){
+  const pairs = [
+    [["Germany","Paraguay"], "Gillette Stadium, Foxborough"],
+    [["Netherlands","Morocco"], "Estadio BBVA, Monterrey"],
+    [["Brazil","Japan"], "NRG Stadium, Houston"],
+    [["South Africa","Canada"], "SoFi Stadium, Inglewood"],
+    [["Norway","Côte d'Ivoire"], "AT&T Stadium, Arlington"],
+    [["France","Sweden"], "MetLife Stadium, East Rutherford"],
+    [["Mexico","Ecuador"], "Estadio Azteca, Mexico City"],
+    [["England","DR Congo"], "Mercedes-Benz Stadium, Atlanta"],
+    [["Belgium","Senegal"], "Lumen Field, Seattle"],
+    [["United States","Bosnia and Herzegovina"], "Levi's Stadium, Santa Clara"],
+    [["Spain","Austria"], "SoFi Stadium, Inglewood"],
+    [["Portugal","Croatia"], "BMO Field, Toronto"],
+    [["Switzerland","Algeria"], "BC Place, Vancouver"],
+    [["Australia","Egypt"], "AT&T Stadium, Arlington"],
+    [["Argentina","Cabo Verde"], "Hard Rock Stadium, Miami Gardens"],
+    [["Colombia","Ghana"], "Arrowhead Stadium, Kansas City"],
+  ];
+  pairs.forEach(([[a,b],venue])=>{
+    const key = [norm(a),norm(b)].sort().join("|");
+    VENUE_LOOKUP[key] = venue;
+  });
+})();
+
+function getVenue(home, away){
+  if(!home || !away) return null;
+  const key = [norm(home),norm(away)].sort().join("|");
+  return VENUE_LOOKUP[key] || null;
+}
+
 // The verified set of 32 teams that actually qualified for the knockout
 // stage, taken directly from the two arrays above (confirmed against the
 // official FIFA bracket). A team not in this set never advanced past group
@@ -1123,7 +1166,7 @@ function renderBracket(data){
 
   function miniMatch(d, scale){
     if(!d || (!d.home && !d.away)){
-      return `<div class="bkx-match bkx-empty"></div>`;
+      return `<div class="bkx-match-wrap"><div class="bkx-match bkx-empty"></div></div>`;
     }
     const hd=getDrafter(d.home), ad=getDrafter(d.away);
     const homeWin = d.winner===d.home, awayWin=d.winner===d.away;
@@ -1131,6 +1174,18 @@ function renderBracket(data){
     const aScore = d.isDone||d.isLive ? (d.ag??'') : '';
     const hAvatar = hd ? `<img class="bkx-avatar" src="${AVATARS[hd]}" alt="${hd}" title="${hd}">` : '';
     const aAvatar = ad ? `<img class="bkx-avatar" src="${AVATARS[ad]}" alt="${ad}" title="${ad}">` : '';
+    // Date, time, and venue above the match -- shown only when we have a
+    // real confirmed fixture (both teams known). Partial "vs TBD" slots
+    // don't get one, since which two teams actually play there isn't
+    // determined until the earlier round resolves.
+    let dateLine = '';
+    if(d.utcDate && d.home && d.away){
+      const dt = new Date(d.utcDate);
+      const dateStr = dt.toLocaleDateString([],{month:'short',day:'numeric'});
+      const timeStr = dt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+      const venue = getVenue(d.home, d.away);
+      dateLine = `<div class="bkx-date">${dateStr}, ${timeStr}${venue?` &middot; ${venue}`:''}</div>`;
+    }
     // FIFA broadcast standard: show the regulation/ET score, with a compact
     // penalty-result tag next to the winner's row only (matches how ESPN/
     // Sky/CBS show shootout results inline with the box score).
@@ -1151,10 +1206,13 @@ function renderBracket(data){
           <span class="bkx-s">${aScore}</span>
         </div>`
       : `<div class="bkx-row bkx-tbd"><span class="bkx-name">TBD</span></div>`;
-    return `<div class="bkx-match ${d.isLive?'bkx-live-match':''} ${d.partial?'bkx-partial':''}">
-      ${homeRow}
-      ${awayRow}
-      ${d.penalties && d.isDone ? `<div class="bkx-pens-row">${penTag}</div>` : ''}
+    return `<div class="bkx-match-wrap">
+      ${dateLine}
+      <div class="bkx-match ${d.isLive?'bkx-live-match':''} ${d.partial?'bkx-partial':''}">
+        ${homeRow}
+        ${awayRow}
+        ${d.penalties && d.isDone ? `<div class="bkx-pens-row">${penTag}</div>` : ''}
+      </div>
     </div>`;
   }
 
@@ -1166,9 +1224,15 @@ function renderBracket(data){
   const CARD_H = 90, CARD_W = 210, V_GAP = 20, COL_W = 248;
   const NUM_COLS_PER_SIDE = 4; // R32, R16, QF, SF
   const CENTER_W = 248;
+  // Extra vertical room reserved above each match box for the date/time/
+  // venue line. Baked into the row spacing (not just added as CSS) so the
+  // connector lines, round labels, and box positions all stay correctly
+  // aligned -- box CENTERS (used for connectors) are unaffected, only the
+  // space above each box grows to fit the new line.
+  const DATE_H = 20;
 
   const r32Centers = [];
-  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+V_GAP) + CARD_H/2); }
+  for(let i=0;i<8;i++){ r32Centers.push(i*(CARD_H+DATE_H+V_GAP) + DATE_H + CARD_H/2); }
   const r16Centers = [0,1,2,3].map(i => (r32Centers[i*2]+r32Centers[i*2+1])/2);
   const qfCenters  = [0,1].map(i => (r16Centers[i*2]+r16Centers[i*2+1])/2);
   const sfCenter   = (qfCenters[0]+qfCenters[1])/2;
@@ -1186,8 +1250,12 @@ function renderBracket(data){
   function boxesHtml(items, centers, x){
     let s = '';
     items.forEach((d,i)=>{
-      const top = centers[i] - CARD_H/2;
-      s += `<div style="position:absolute;left:${x}px;top:${top}px;width:${CARD_W}px;height:${CARD_H}px;">${miniMatch(d)}</div>`;
+      // Box's own top stays exactly where it was before (centers[i]-CARD_H/2);
+      // the wrapper now starts DATE_H higher and is DATE_H taller to make
+      // room for the date/venue line miniMatch renders above the box.
+      const boxTop = centers[i] - CARD_H/2;
+      const wrapTop = boxTop - DATE_H;
+      s += `<div style="position:absolute;left:${x}px;top:${wrapTop}px;width:${CARD_W}px;height:${CARD_H+DATE_H}px;">${miniMatch(d)}</div>`;
     });
     return s;
   }
@@ -1265,12 +1333,12 @@ function renderBracket(data){
     return `<div style="position:absolute;left:${x}px;top:${labelTop}px;width:${CARD_W}px;text-align:center;font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);">${text}</div>`;
   }
   let labelsHtml = '';
-  labelsHtml += colLabel('Quarterfinal Round', colX.leftR16, r16Centers[0]-CARD_H/2);
-  labelsHtml += colLabel('Semifinal Round', colX.leftQF, qfCenters[0]-CARD_H/2);
-  labelsHtml += colLabel('Final Round', colX.leftSF, sfCenter-CARD_H/2);
-  labelsHtml += colLabel('Final Round', colX.rightSF, sfCenter-CARD_H/2);
-  labelsHtml += colLabel('Semifinal Round', colX.rightQF, qfCenters[0]-CARD_H/2);
-  labelsHtml += colLabel('Quarterfinal Round', colX.rightR16, r16Centers[0]-CARD_H/2);
+  labelsHtml += colLabel('Quarterfinal Round', colX.leftR16, r16Centers[0]-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Semifinal Round', colX.leftQF, qfCenters[0]-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Final Round', colX.leftSF, sfCenter-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Final Round', colX.rightSF, sfCenter-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Semifinal Round', colX.rightQF, qfCenters[0]-CARD_H/2-DATE_H);
+  labelsHtml += colLabel('Quarterfinal Round', colX.rightR16, r16Centers[0]-CARD_H/2-DATE_H);
 
   boxes += boxesHtml(leftR32, r32Centers, colX.leftR32);
   boxes += boxesHtml(leftR16, r16Centers, colX.leftR16);
@@ -1305,7 +1373,9 @@ function renderBracket(data){
     </div>`;
 
   let html = `<style>
-    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:8px 12px;font-size:.95rem;display:flex;flex-direction:column;gap:5px;width:100%;height:100%;justify-content:center;box-sizing:border-box;}
+    .bkx-match-wrap{display:flex;flex-direction:column;width:100%;height:100%;}
+    .bkx-date{font-size:.62rem;color:var(--muted);text-align:center;letter-spacing:.02em;line-height:1.3;padding:1px 2px 3px;flex-shrink:0;}
+    .bkx-match{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:8px 12px;font-size:.95rem;display:flex;flex-direction:column;gap:5px;width:100%;flex:1;justify-content:center;box-sizing:border-box;min-height:0;}
     .bkx-empty{background:var(--panel2);opacity:.3;}
     .bkx-row{display:flex;align-items:center;gap:4px;padding:1px 0;}
     .bkx-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);}
