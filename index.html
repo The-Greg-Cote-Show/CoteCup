@@ -1393,21 +1393,21 @@ function renderBracket(data){
   // box, leaving no place to see "TBD vs TBD, Jul 19, East Rutherford" or
   // the actual Final score once it's played.
   const finalBoxH = 118, championBoxH = 100, thirdBoxH = 108, stackGap = 22;
-  const championTop = sfCenter - championBoxH/2;
-  const finalTop = championTop - stackGap - finalBoxH;
-  const thirdTop = championTop + championBoxH + stackGap;
+  const finalTop = sfCenter - finalBoxH/2;
+  const championTop = finalTop - stackGap - championBoxH;
+  const thirdTop = finalTop + finalBoxH + stackGap;
 
   const centerHtml = `
-    <div id="bkxFinalBox" style="position:absolute;left:${centerBoxLeft}px;top:${finalTop}px;width:${centerBoxW}px;">
-      <div class="bkx-final-box">
-        <div class="bkx-final-label">Final</div>
-        ${miniMatch(finalData)}
-      </div>
-    </div>
     <div id="bkxChampionBox" style="position:absolute;left:${centerBoxLeft}px;top:${championTop}px;width:${centerBoxW}px;">
       <div class="bkx-champion-box">
         <div class="bkx-champion-label">Champion</div>
         <div class="bkx-champion-name">${champion||'\u2014'}</div>
+      </div>
+    </div>
+    <div id="bkxFinalBox" style="position:absolute;left:${centerBoxLeft}px;top:${finalTop}px;width:${centerBoxW}px;">
+      <div class="bkx-final-box">
+        <div class="bkx-final-label">Final</div>
+        ${miniMatch(finalData)}
       </div>
     </div>
     <div id="bkxThirdBox" style="position:absolute;left:${centerBoxLeft}px;top:${thirdTop}px;width:${centerBoxW}px;">
@@ -1489,24 +1489,26 @@ function renderBracket(data){
 
   el.innerHTML = html;
 
-  // Re-align the Final/Champion/3rd Place stack using ACTUAL rendered
+  // Re-align the Champion/Final/3rd Place stack using ACTUAL rendered
   // heights rather than the static guesses used above -- text wrapping,
   // padding, and font rendering can all shift the true height slightly,
   // and this is the difference between "looks close" and being provably
-  // centered on the connectors.
+  // centered on the connectors. Final is the box pinned to sfCenter (the
+  // point where both semifinal connector lines converge), with Champion
+  // measured and placed above it and 3rd Place below.
   const finalEl = document.getElementById('bkxFinalBox');
   const champEl = document.getElementById('bkxChampionBox');
   const thirdEl = document.getElementById('bkxThirdBox');
-  if(champEl){
-    const realChampH = champEl.offsetHeight;
-    const correctedChampTop = sfCenter - realChampH/2;
-    champEl.style.top = correctedChampTop + 'px';
-    if(finalEl){
-      const realFinalH = finalEl.offsetHeight;
-      finalEl.style.top = (correctedChampTop - stackGap - realFinalH) + 'px';
+  if(finalEl){
+    const realFinalH = finalEl.offsetHeight;
+    const correctedFinalTop = sfCenter - realFinalH/2;
+    finalEl.style.top = correctedFinalTop + 'px';
+    if(champEl){
+      const realChampH = champEl.offsetHeight;
+      champEl.style.top = (correctedFinalTop - stackGap - realChampH) + 'px';
     }
     if(thirdEl){
-      thirdEl.style.top = (correctedChampTop + realChampH + stackGap) + 'px';
+      thirdEl.style.top = (correctedFinalTop + realFinalH + stackGap) + 'px';
     }
   }
 
